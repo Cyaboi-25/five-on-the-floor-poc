@@ -225,6 +225,46 @@ button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-h
   <button class="next-btn" style="margin-top:20px" id="violation-next-btn">Next Possession →</button>
 </div>
 
+<!-- SHOT PREVIEW -->
+<div id="shot-preview" style="
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+">
+  <div style="
+    background: #1a1d27;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 24px;
+    max-width: 300px;
+    width: 90%;
+    text-align: center;
+  ">
+    <div id="preview-zone" style="font-size:11px;color:#8a8799;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;"></div>
+    <div id="preview-points" style="font-size:13px;color:#f0ede6;margin-bottom:16px;"></div>
+    <div id="preview-coverage" style="font-size:12px;color:#8a8799;margin-bottom:8px;"></div>
+    <div id="preview-dice" style="display:flex;gap:8px;justify-content:center;margin:12px 0;"></div>
+    <div id="preview-threshold" style="font-size:12px;color:#8a8799;margin-bottom:12px;"></div>
+    <div id="preview-modifiers" style="font-size:11px;color:#8a8799;margin-bottom:12px;line-height:1.6;"></div>
+    <div id="preview-quality-label" style="font-size:15px;font-weight:500;margin-bottom:4px;"></div>
+    <div id="preview-probability" style="font-size:12px;color:#8a8799;margin-bottom:20px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button id="btn-confirm-shot" style="
+        flex:1;background:rgba(61,186,110,0.12);border:1px solid #3dba6e;
+        border-radius:8px;color:#3dba6e;padding:10px;font-size:13px;cursor:pointer;
+      ">Take the shot</button>
+      <button id="btn-cancel-shot" style="
+        flex:1;background:#22263a;border:1px solid rgba(255,255,255,0.08);
+        border-radius:8px;color:#8a8799;padding:10px;font-size:13px;cursor:pointer;
+      ">Pass instead</button>
+    </div>
+  </div>
+</div>
+
 <!-- PASS OVERLAY -->
 <div class="pass-overlay" id="pass-overlay">
   <h3 style="margin-bottom:12px">Pass to...</h3>
@@ -326,6 +366,31 @@ const THRESHOLDS = {
   wing_l:[4,5,6,3],wing_r:[4,5,6,3],
   tok:[6,6,7,3],half:[7,7,7,3],
 };
+
+// Probability lookup — P(make) = 1 - ((threshold-1)/6)^dice
+const SHOT_PROBABILITIES = {
+  1: { 3:67, 4:50, 5:33, 6:17, 7:0 },
+  2: { 3:89, 4:75, 5:56, 6:31, 7:0 },
+  3: { 3:96, 4:88, 5:70, 6:42, 7:0 },
+  4: { 3:98, 4:94, 5:80, 6:52, 7:0 },
+  5: { 3:99, 4:97, 5:87, 6:60, 7:0 },
+};
+
+function getShotProbability(dice, threshold) {
+  if (threshold >= 7) return 0;
+  if (dice <= 0) return 0;
+  const d = Math.min(Math.max(dice, 1), 5);
+  return SHOT_PROBABILITIES[d][threshold] || 0;
+}
+
+function getShotQualityLabel(probability) {
+  if (probability >= 88) return { label: 'GREAT LOOK',   color: '#3dba6e' };
+  if (probability >= 70) return { label: 'GOOD LOOK',    color: '#3dba6e' };
+  if (probability >= 50) return { label: 'DECENT LOOK',  color: '#E8A030' };
+  if (probability >= 33) return { label: 'TOUGH SHOT',   color: '#E8A030' };
+  if (probability >= 17) return { label: 'BAD SHOT',     color: '#e85050' };
+  return                         { label: 'DESPERATION', color: '#e85050' };
+}
 
 const BASKET={col:7,row:13};
 const COLS=16,ROWS=14;
@@ -1207,11 +1272,9 @@ function cpuSwitchOnScreen(screener){
 // ========================================
 // SHOOTING
 // ========================================
-function takeShot(){
-  if(!state.turnFirstAction||!state.ballCarrier)return;
-  const shooter=state.ballCarrier;
+function calculateShot(shooter){
   const zone=getZone(shooter.col,shooter.row);
-  if(!THRESHOLDS[zone])return;
+  if(!THRESHOLDS[zone])return null;
 
   const sizeIdx=shooter.size==='small'?0:shooter.size==='medium'?1:2;
   let threshold=THRESHOLDS[zone][sizeIdx];
@@ -1221,10 +1284,10 @@ function takeShot(){
   const nearest=getNearestDefender(shooter);
   const dist=nearest?chebyshevDist(shooter,nearest):99;
   let dice;
-  let coverageLabel;
-  if(dist<=1){dice=1;coverageLabel='Contested'}
-  else if(dist<=3){dice=2;coverageLabel='Open'}
-  else{dice=3;coverageLabel='Wide Open'}
+  let coverageLabel, coverageKey;
+  if(dist<=1){dice=1;coverageLabel='Contested';coverageKey='contested'}
+  else if(dist<=3){dice=2;coverageLabel='Open';coverageKey='open'}
+  else{dice=3;coverageLabel='Wide Open';coverageKey='wide_open'}
 
   const mods=[];
 
@@ -1232,44 +1295,45 @@ function takeShot(){
   if(nearest){
     const sDist=chebyshevDist(shooter,BASKET);
     const dDist=chebyshevDist(nearest,BASKET);
-    if(dDist>sDist+1){dice++;mods.push('+1 die (defender behind)');}
+    if(dDist>sDist+1){dice++;mods.push('+ Defender behind you (+1 die)');}
     else if(dDist<sDist-1){
-      dice=Math.max(1,dice-1);mods.push('-1 die (defender between)');
-      if(dist<=1){threshold++;mods.push('+1 threshold (contested from front)');}
+      dice=Math.max(1,dice-1);mods.push('- Defender in shooting lane (-1 die)');
+      if(dist<=1){threshold++;mods.push('- Lane blocked (threshold +1)');}
     }
   }
 
   // SHOT CALC: size matchup
   if(nearest){
-    // Small defending Large: threshold -1
     if(nearest.size==='small'&&shooter.size==='large'){
-      // Check if enforcer negates
       const enforcerActive=nearest.card&&nearest.card.effect&&nearest.card.effect.negate_attacker_bonuses&&isPaintZone(zone);
-      if(!enforcerActive){threshold=Math.max(2,threshold-1);mods.push('-1 threshold (shooting over small)');}
+      if(!enforcerActive){threshold=Math.max(2,threshold-1);mods.push('+ Small defender — easier to shoot over (threshold -1)');}
     }
-    // Large defending Small on perimeter: min 2 dice
     if(nearest.size==='large'&&shooter.size==='small'){
       const perimZones=['wing_l','wing_r','corner_l','corner_r','tok'];
       if(perimZones.includes(zone)){
         const hasCloseout=nearest.card&&nearest.card.effect&&nearest.card.effect.remove_closeout_penalty;
         if(!hasCloseout){
-          dice=Math.max(2,dice);mods.push('Min 2 dice (big can\'t close out)');
+          dice=Math.max(2,dice);mods.push('+ Large defender can\'t close out (min 2 dice)');
         }
       }
     }
   }
 
-  // SHOT CALC: Large in paint bonus
-  if(shooter.size==='large'&&isPaintZone(zone)){
+  // SHOT CALC: Large in paint — bonus die ALWAYS
+  if(isPaintZone(zone)&&shooter.size==='large'){
     const enforcerNearby=state.defense.some(d=>d.card&&d.card.effect&&d.card.effect.negate_attacker_bonuses&&isPaintZone(getZone(d.col,d.row))&&chebyshevDist(d,shooter)<=2);
-    if(!enforcerNearby){dice++;mods.push('+1 die (big in paint)');}
+    if(!enforcerNearby){dice++;mods.push('+ Paint bonus — Large center (+1 die)');}
+  }
+  // SHOT CALC: Paint Beast card (Small/Medium) — only when Open+
+  if(isPaintZone(zone)&&shooter.card&&shooter.card.effect&&shooter.card.effect.paint_bonus&&shooter.size!=='large'&&coverageKey!=='contested'){
+    dice++;mods.push('+ Paint Beast card (+1 die)');
   }
 
   // SHOT CALC: clock pressure
-  if(state.clock<=6){dice=Math.max(1,dice-1);mods.push('-1 die (clock pressure)');}
+  if(state.clock<=6){dice=Math.max(1,dice-1);mods.push('- Clock pressure — ≤6 clicks (-1 die)');}
 
   // SHOT CALC: momentum
-  if(state.momentum>=2){dice++;mods.push('+1 die (momentum)');}
+  if(state.momentum>=2){dice++;mods.push('+ Momentum bonus (+1 die)');}
 
   // SHOT CALC: card effects
   const cardResult=applyCardEffects(shooter,dice,threshold,zone,nearest);
@@ -1279,14 +1343,119 @@ function takeShot(){
   // Cap dice
   dice=Math.min(5,Math.max(1,dice));
 
-  // Roll
+  return {shooter,zone,pts,threshold,dice,coverageLabel,coverageKey,mods,nearest};
+}
+
+function takeShot(){
+  if(!state.turnFirstAction||!state.ballCarrier)return;
+  const calc=calculateShot(state.ballCarrier);
+  if(!calc)return;
+  showShotPreview(calc);
+}
+
+function showShotPreview(calc){
+  const {shooter,zone,pts,threshold,dice,coverageLabel,coverageKey,mods}=calc;
+  const probability=getShotProbability(dice,threshold);
+  const quality=getShotQualityLabel(probability);
+
+  document.getElementById('preview-zone').textContent=zone.replace(/_/g,' ').toUpperCase();
+  document.getElementById('preview-points').textContent=pts===3?'3-POINTER':'2-POINTER';
+  document.getElementById('preview-coverage').textContent=`${coverageLabel} · ${dice} ${dice===1?'die':'dice'}`;
+
+  const diceEl=document.getElementById('preview-dice');
+  diceEl.innerHTML='';
+  for(let i=0;i<dice;i++){
+    const die=document.createElement('div');
+    die.style.cssText='width:40px;height:40px;border-radius:8px;border:2px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:18px;color:rgba(255,255,255,0.3);font-family:Courier New,monospace;';
+    die.textContent='?';
+    diceEl.appendChild(die);
+  }
+
+  document.getElementById('preview-threshold').textContent=threshold>=7?'Need 7+ — impossible on a d6':`Need ${threshold}+ on any die`;
+  document.getElementById('preview-modifiers').innerHTML=mods.length>0?mods.map(m=>`<div>${m}</div>`).join(''):'';
+
+  const labelEl=document.getElementById('preview-quality-label');
+  labelEl.textContent=quality.label;
+  labelEl.style.color=quality.color;
+
+  document.getElementById('preview-probability').textContent=threshold>=7?'0% — auto miss':`${probability}% chance of scoring`;
+
+  document.getElementById('shot-preview').style.display='flex';
+
+  document.getElementById('btn-confirm-shot').onclick=()=>{
+    document.getElementById('shot-preview').style.display='none';
+    resolveShot(calc);
+  };
+  document.getElementById('btn-cancel-shot').onclick=()=>{
+    document.getElementById('shot-preview').style.display='none';
+  };
+}
+
+function resolveShot(calc){
+  const {shooter,zone,pts,threshold,dice,coverageLabel,mods}=calc;
+
   const rolls=[];
   for(let i=0;i<dice;i++)rolls.push(Math.floor(Math.random()*6)+1);
   const made=rolls.some(r=>r>=threshold);
 
-  // Show overlay
-  showDiceOverlay(zone,pts,threshold,coverageLabel,dice,mods,rolls,made);
+  // Show animated dice overlay
+  const ov=document.getElementById('dice-overlay');
+  document.getElementById('dice-zone').textContent=`${zoneName(zone)} · ${pts===3?'3-pointer':'2-pointer'} · need ${threshold}+`;
+  document.getElementById('dice-coverage').textContent=`${coverageLabel}: ${dice} ${dice===1?'die':'dice'}`;
+  document.getElementById('dice-mods').innerHTML=mods.map(m=>`<div class="mod-line">${m}</div>`).join('');
 
+  const dr=document.getElementById('dice-row');
+  dr.innerHTML='';
+  const dieEls=rolls.map(()=>{
+    const d=document.createElement('div');
+    d.className='die';
+    d.style.cssText='width:48px;height:48px;border-radius:10px;border:2px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;font-family:Courier New,monospace;color:rgba(255,255,255,0.3);transition:border-color 0.2s,color 0.2s,background 0.2s;';
+    d.textContent='?';
+    dr.appendChild(d);
+    return d;
+  });
+
+  document.getElementById('dice-result').textContent='';
+  document.getElementById('dice-pts').textContent='';
+  ov.classList.add('active');
+
+  // Phase 2: flicker
+  const flickerInterval=setInterval(()=>{
+    dieEls.forEach(el=>{
+      el.textContent=Math.floor(Math.random()*6)+1;
+      el.style.color='rgba(255,255,255,0.4)';
+    });
+  },60);
+
+  // Phase 3: land on final values
+  setTimeout(()=>{
+    clearInterval(flickerInterval);
+    rolls.forEach((val,i)=>{
+      setTimeout(()=>{
+        const hit=val>=threshold;
+        dieEls[i].textContent=val;
+        dieEls[i].style.color=hit?'#3dba6e':'#e85050';
+        dieEls[i].style.borderColor=hit?'#3dba6e':'#e85050';
+        dieEls[i].style.background=hit?'rgba(61,186,110,0.12)':'rgba(232,80,80,0.10)';
+      },i*100);
+    });
+  },600);
+
+  // Phase 4: show result
+  setTimeout(()=>{
+    const rt=document.getElementById('dice-result');
+    if(made){
+      rt.textContent=pts===3?'THREE! +3':`BUCKET! +${pts}`;
+      rt.style.color=pts===3?'var(--gold)':'var(--green)';
+    } else {
+      rt.textContent='NO GOOD';
+      rt.style.color='var(--red)';
+    }
+    document.getElementById('dice-pts').textContent=
+      `${zone.replace(/_/g,' ')} · ${rolls.length} ${rolls.length===1?'die':'dice'} · need ${threshold}+ · rolled ${rolls.join(', ')}`;
+  },950);
+
+  // Update state
   if(made){
     state.score+=pts;
     state.possessionStats.made++;
@@ -1295,13 +1464,17 @@ function takeShot(){
       state.possessionStats.bestPossScore=pts;
       state.possessionStats.bestPoss=state.possession;
     }
-    // Momentum
     state.momentum=clamp(state.momentum+(pts===3?2:1),-2,2);
   } else {
     state.possessionStats.missed++;
-    // Wide open miss gives CPU momentum
     if(coverageLabel==='Wide Open')state.momentum=clamp(state.momentum-1,-2,2);
   }
+
+  const nextBtn=document.getElementById('dice-next-btn');
+  nextBtn.onclick=()=>{
+    ov.classList.remove('active');
+    advancePossession();
+  };
 }
 
 function applyCardEffects(shooter,dice,threshold,zone,nearest){
@@ -1327,46 +1500,12 @@ function applyCardEffects(shooter,dice,threshold,zone,nearest){
     const small=THRESHOLDS[zone][0];
     if(small<threshold){threshold=small;mods.push('Positionless: small threshold');}
   }
-  // Paint Beast
-  if(eff.paint_bonus&&isPaintZone(zone)){dice++;mods.push('+1 die (Paint Beast)');}
   // Lob Finisher
   if(eff.lob_auto_open&&isPaintZone(zone)&&state.lastPassDistance>=3){
     dice=3;mods.push('Lob Finisher: auto Wide Open');
   }
 
   return {dice:Math.min(dice,5),threshold,mods};
-}
-
-function showDiceOverlay(zone,pts,threshold,coverage,dice,mods,rolls,made){
-  const ov=document.getElementById('dice-overlay');
-  document.getElementById('dice-zone').textContent=`${zoneName(zone)} · ${pts===3?'3-pointer':'2-pointer'} · need ${threshold}+`;
-  document.getElementById('dice-coverage').textContent=`${coverage}: ${dice} ${dice===1?'die':'dice'}`;
-  document.getElementById('dice-mods').innerHTML=mods.map(m=>`<div class="mod-line">${m}</div>`).join('');
-  const dr=document.getElementById('dice-row');
-  dr.innerHTML='';
-  rolls.forEach(r=>{
-    const d=document.createElement('div');
-    d.className='die '+(r>=threshold?'hit':'miss');
-    d.textContent=r;
-    dr.appendChild(d);
-  });
-  const rt=document.getElementById('dice-result');
-  if(made){
-    rt.textContent=`BUCKET! +${pts}`;
-    rt.style.color=pts===3?'var(--gold)':'var(--green)';
-  } else {
-    rt.textContent='NO GOOD';
-    rt.style.color='var(--red)';
-  }
-  document.getElementById('dice-pts').textContent=made?`Score: ${state.score}`:'';
-  ov.classList.add('active');
-
-  const nextBtn=document.getElementById('dice-next-btn');
-  nextBtn.onclick=()=>{
-    ov.classList.remove('active');
-    advancePossession();
-  };
-  setTimeout(()=>{/* auto advance hint */},2500);
 }
 
 function showViolation(title,detail){
