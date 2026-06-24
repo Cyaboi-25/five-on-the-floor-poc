@@ -9,28 +9,33 @@ const STAR_COLORS = { 1: '#8a8799', 2: '#E8A030', 3: '#a060e0' };
 export default function LineupScreen({ G, moves }) {
   const [roster] = useState(() => generateRoster());
   const [cpuRoster] = useState(() => generateCPURoster(G.difficulty));
-  const [rolls, setRolls] = useState([]);        // up to 3 rolled cards
-  const [activeRoll, setActiveRoll] = useState(null);  // index into rolls
-  const [assignments, setAssignments] = useState({}); // pieceId → rollIndex
+  // Roll logic: get 3 cards at once, can re-roll all 3 up to 2 more times
+  const [cards, setCards]           = useState(null);   // null or [card, card, card]
+  const [rollsUsed, setRollsUsed]   = useState(0);      // 0 = not rolled yet
+  const [activeRoll, setActiveRoll] = useState(null);   // which card is selected (0-2)
+  const [assignments, setAssignments] = useState({});   // pieceId → cardIndex
 
-  const rollsLeft = 3 - rolls.length;
-  const allRolled = rolls.length === 3;
+  const TOTAL_ROLLS = 3; // 1 initial + 2 re-rolls
+  const rollsLeft   = TOTAL_ROLLS - rollsUsed;
+  const hasRolled   = rollsUsed > 0;
 
   function doRoll() {
-    if (rolls.length >= 3) return;
-    setRolls(prev => [...prev, rollCard()]);
-    setActiveRoll(rolls.length); // auto-select the newly rolled card
+    if (rollsUsed >= TOTAL_ROLLS) return;
+    setCards([rollCard(), rollCard(), rollCard()]);
+    setAssignments({});   // re-roll wipes previous assignments
+    setActiveRoll(null);
+    setRollsUsed(prev => prev + 1);
   }
 
   function selectRoll(idx) {
     const alreadyAssigned = Object.values(assignments).includes(idx);
-    if (alreadyAssigned) return; // already placed
+    if (alreadyAssigned) return;
     setActiveRoll(activeRoll === idx ? null : idx);
   }
 
   function handlePieceClick(pieceId) {
-    if (activeRoll === null) return;
-    const card = rolls[activeRoll];
+    if (activeRoll === null || !cards) return;
+    const card = cards[activeRoll];
     const piece = roster.find(p => p.id === pieceId);
     if (!piece) return;
     if (!card.eligible.includes(piece.size)) return;
@@ -55,7 +60,7 @@ export default function LineupScreen({ G, moves }) {
   function confirmLineup() {
     const finalRoster = roster.map(p => ({
       ...p,
-      card: assignments[p.id] !== undefined ? rolls[assignments[p.id]] : null,
+      card: assignments[p.id] !== undefined && cards ? cards[assignments[p.id]] : null,
     }));
     const finalCPURoster = generateCPUCards(cpuRoster, G.difficulty);
     moves.setRosters(finalRoster, finalCPURoster, [], []);
@@ -71,8 +76,8 @@ export default function LineupScreen({ G, moves }) {
         <div className="roster-row">
           {roster.map(p => {
             const assignedRollIdx = assignments[p.id];
-            const card = assignedRollIdx !== undefined ? rolls[assignedRollIdx] : null;
-            const isEligible = activeRoll !== null && rolls[activeRoll]?.eligible.includes(p.size);
+            const card = assignedRollIdx !== undefined && cards ? cards[assignedRollIdx] : null;
+            const isEligible = activeRoll !== null && cards?.[activeRoll]?.eligible.includes(p.size);
             const isIneligible = activeRoll !== null && !isEligible;
 
             return (
@@ -107,14 +112,16 @@ export default function LineupScreen({ G, moves }) {
       <div className="lineup-section">
         <div className="lineup-section-title">
           CARD DRAFT
-          <span className="rolls-remaining">
-            {rollsLeft > 0 ? `${rollsLeft} roll${rollsLeft > 1 ? 's' : ''} left` : 'all rolled'}
-          </span>
+          {hasRolled && (
+            <span className="rolls-remaining">
+              {rollsLeft > 0 ? `${rollsLeft} re-roll${rollsLeft > 1 ? 's' : ''} left` : 'final draw'}
+            </span>
+          )}
         </div>
 
         <div className="rolls-row">
           {Array.from({ length: 3 }, (_, i) => {
-            const card = rolls[i];
+            const card = cards?.[i];
             const isActive = activeRoll === i;
             const isAssigned = Object.values(assignments).includes(i);
 
@@ -151,15 +158,15 @@ export default function LineupScreen({ G, moves }) {
           })}
         </div>
 
-        {!allRolled && (
+        {rollsLeft > 0 && (
           <button className="roll-btn" onClick={doRoll}>
-            🎲 ROLL {rolls.length + 1} of 3
+            {!hasRolled ? '🎲 ROLL CARDS' : `🎲 RE-ROLL (${rollsLeft - 1} left after this)`}
           </button>
         )}
 
-        {allRolled && activeRoll !== null && (
+        {hasRolled && activeRoll !== null && (
           <div className="roll-hint">
-            Tap an eligible player above to assign <strong>{rolls[activeRoll]?.name}</strong>
+            Tap an eligible player above to assign <strong>{cards?.[activeRoll]?.name}</strong>
           </div>
         )}
       </div>
