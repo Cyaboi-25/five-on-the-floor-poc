@@ -45,6 +45,11 @@ button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-h
 .piece-card .card-slot{height:20px;margin-top:4px;font-size:0.6rem;color:var(--gold);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .piece-card.grayed{opacity:0.3;pointer-events:none}
+.piece-card.assignable{border-color:var(--gold);box-shadow:0 0 12px rgba(232,160,48,0.4);
+  animation:assignPulse 1s ease-in-out infinite}
+@keyframes assignPulse{0%,100%{box-shadow:0 0 8px rgba(232,160,48,0.3)}50%{box-shadow:0 0 16px rgba(232,160,48,0.6)}}
+.card-item.clickable{cursor:pointer;border:2px dashed var(--gold) !important}
+.card-item.clickable:hover{background:rgba(232,160,48,0.15) !important}
 
 .budget-bar{display:flex;gap:6px;justify-content:center;margin-bottom:12px;font-size:1.2rem}
 .budget-dot{color:var(--gold)}.budget-dot.spent{color:var(--muted);opacity:0.3}
@@ -525,17 +530,23 @@ function renderRollUI(){
 
   if(state.keptCards.length>0&&state.currentRoll.length===0){
     // Cards already kept — show them with reassign option
-    label.textContent=`Your cards (${state.rollsLeft} roll${state.rollsLeft!==1?'s':''} left)`;
+    label.textContent=state.assignMode
+      ?`Now tap a player to assign ${CARDS[state.assignMode].name}`
+      :`Tap a card below to assign it to a player`;
+    label.style.color=state.assignMode?'var(--gold)':'var(--muted)';
     state.keptCards.forEach(card=>{
       const div=document.createElement('div');
-      div.className='card-item dealt';
+      const isActive=state.assignMode===card.key;
+      const isAssigned=state.roster.some(p=>p.card&&p.card.key===card.key);
+      div.className='card-item dealt'+(isActive?' selected':'')+(!state.assignMode&&!isAssigned?' clickable':'');
       div.innerHTML=`<div class="card-stars">${card.label}</div><div class="card-name">${card.name}</div>
         <div class="card-desc">${card.description}</div>
-        <div class="card-elig">${card.eligible.map(s=>s[0].toUpperCase()).join('/')}</div>`;
-      div.onclick=()=>startAssign(card.key);
+        <div class="card-elig">${card.eligible.map(s=>s[0].toUpperCase()).join('/')}</div>
+        <div style="font-size:0.6rem;margin-top:4px;color:${isActive?'var(--gold)':isAssigned?'var(--green)':'var(--muted)'};font-weight:700">${isActive?'⬆ TAP A PLAYER ABOVE':isAssigned?'✓ Assigned':'Tap to assign'}</div>`;
+      if(!isActive)div.onclick=()=>startAssign(card.key);
       cardsDiv.appendChild(div);
     });
-    if(state.rollsLeft>0){
+    if(state.rollsLeft>0&&!state.assignMode){
       const rerollBtn=document.createElement('button');
       rerollBtn.className='btn btn-secondary';
       rerollBtn.style.cssText='max-width:200px;justify-content:center;font-size:0.85rem';
@@ -543,8 +554,15 @@ function renderRollUI(){
       rerollBtn.onclick=()=>{state.keptCards=[];state.selectedCards=[];state.roster.forEach(p=>{p.card=null;p.speed=p.size==='small'?2:1});rollCards();renderRoster()};
       actionsDiv.appendChild(rerollBtn);
     }
-    document.getElementById('assign-instructions').style.display='block';
-    document.getElementById('assign-instructions').textContent='Tap a card then tap a piece to reassign';
+    if(state.assignMode){
+      const cancelBtn=document.createElement('button');
+      cancelBtn.className='btn btn-secondary';
+      cancelBtn.style.cssText='max-width:200px;justify-content:center;font-size:0.85rem';
+      cancelBtn.textContent='Cancel';
+      cancelBtn.onclick=()=>{state.assignMode=null;renderRoster();renderRollUI()};
+      actionsDiv.appendChild(cancelBtn);
+    }
+    document.getElementById('assign-instructions').style.display='none';
     return;
   }
 
@@ -592,11 +610,7 @@ function startAssign(cardKey){
   state.assignMode=cardKey;
   state.roster.forEach(p=>{if(p.card&&p.card.key===cardKey)p.card=null});
   renderRoster();
-  document.querySelectorAll('#rolled-cards .card-item').forEach(el=>{
-    const name=el.querySelector('.card-name').textContent;
-    const card=state.keptCards.find(c=>c.name===name);
-    el.style.borderColor=(card&&card.key===cardKey)?'var(--gold)':'rgba(61,186,110,0.5)';
-  });
+  renderRollUI();
 }
 
 function renderRoster(){
@@ -607,16 +621,24 @@ function renderRoster(){
     div.className='piece-card';
     const sizeLabel=p.size==='small'?'Guard':p.size==='medium'?'Wing':'Center';
     const cardText=p.card?p.card.name:'—';
-    div.innerHTML=`<div class="circle">${p.label}${i+1}</div>
-      <div class="size-name">${sizeLabel}</div>
-      <div class="card-slot">${cardText}</div>`;
     if(state.assignMode){
       const card=CARDS[state.assignMode];
       if(!card.eligible.includes(p.size)){
         div.classList.add('grayed');
+        div.innerHTML=`<div class="circle">${p.label}${i+1}</div>
+          <div class="size-name">${sizeLabel}</div>
+          <div class="card-slot">${cardText}</div>`;
       } else {
+        div.classList.add('assignable');
+        div.innerHTML=`<div class="circle">${p.label}${i+1}</div>
+          <div class="size-name">${sizeLabel}</div>
+          <div class="card-slot" style="color:var(--gold);font-weight:700">⬇ TAP</div>`;
         div.onclick=()=>assignCard(i);
       }
+    } else {
+      div.innerHTML=`<div class="circle">${p.label}${i+1}</div>
+        <div class="size-name">${sizeLabel}</div>
+        <div class="card-slot">${cardText}</div>`;
     }
     row.appendChild(div);
   });
