@@ -71,8 +71,13 @@ export default function Board({ G, ctx, moves }) {
 
           {/* Bottom bar: scheme + momentum */}
           <div className="bottom-bar">
-            <div className="scheme-badge">
-              {G.cpuScheme === 'zone' ? '🔷 ZONE' : '👤 MAN'}
+            <div className="scheme-wrap">
+              <div className="scheme-badge">
+                {G.cpuScheme === 'zone' ? '🔷 ZONE' : '👤 MAN'}
+              </div>
+              {G.cpuSchemeReason ? (
+                <div className="scheme-reason">{G.cpuSchemeReason}</div>
+              ) : null}
             </div>
             <MomentumTrack momentum={G.momentum} />
           </div>

@@ -1,4 +1,4 @@
-import { chebyshev, getTileZone, PAINT_ZONES, COLS, ROWS } from './constants';
+import { chebyshev, getTileZone, PAINT_ZONES, COLS, ROWS, BASKET } from './constants';
 
 export const ZONE_TERRITORIES = {
   d0: ['corner_l', 'wing_l'],
@@ -8,16 +8,54 @@ export const ZONE_TERRITORIES = {
   d4: ['paint', 'elbow_r', 'dunker_r'],
 };
 
+const DIFF_ORDER = ['rookie', 'pro', 'allstar', 'hof', 'legend'];
+
+// DDA: secretly adjusts effective difficulty based on scoring streaks
+function getDDADifficulty(G) {
+  const diff     = G.difficulty;
+  const streak   = G.playerScoreStreak   || 0;
+  const scoreless = G.playerScorelessStreak || 0;
+  const idx = DIFF_ORDER.indexOf(diff);
+
+  // Hot streak on easy/mid difficulties → CPU tightens up one tier
+  if (streak >= 3 && idx <= 2) return DIFF_ORDER[Math.min(idx + 1, 4)];
+
+  // Cold streak on hard difficulties → CPU eases off one tier (pity)
+  if (scoreless >= 2 && idx >= 3) return DIFF_ORDER[Math.max(idx - 1, 0)];
+
+  return diff;
+}
+
+// Position defender 40% of the way between their man and the basket
+// Forces them to front/shade instead of sitting on the man
+function denialPosition(target) {
+  return {
+    col: Math.round(target.col * 0.6 + BASKET.col * 0.4),
+    row: Math.round(target.row * 0.6 + BASKET.row * 0.4),
+  };
+}
+
+// d4 (free helper): cut the passing lane to the most dangerous receiver
+function passingLaneDenial(ballCarrier, offPlayers) {
+  if (!ballCarrier) return { col: 7, row: 10 };
+  const receivers = offPlayers.filter(p => p.id !== ballCarrier.id);
+  if (receivers.length === 0) return { col: 7, row: 10 };
+  // Most dangerous = deepest toward basket (highest row)
+  const hotspot = receivers.reduce((best, p) => p.row > best.row ? p : best, receivers[0]);
+  return {
+    col: Math.round((ballCarrier.col + hotspot.col) / 2),
+    row: Math.round((ballCarrier.row + hotspot.row) / 2),
+  };
+}
+
 export function cpuCommit(G) {
   const defenders   = G.pieces.filter(p => p.role === 'defense');
   const offPlayers  = G.pieces.filter(p => p.role === 'offense');
   const ballCarrier = offPlayers.find(p => p.id === G.ballCarrierId);
   const scheme      = G.cpuScheme;
-  const diff        = G.difficulty;
+  const diff        = getDDADifficulty(G);
 
-  if (scheme === 'zone') {
-    return commitZone(defenders, offPlayers, ballCarrier, diff, G);
-  }
+  if (scheme === 'zone') return commitZone(defenders, offPlayers, ballCarrier, diff, G);
   return commitMan(defenders, offPlayers, ballCarrier, diff, G);
 }
 
@@ -31,34 +69,66 @@ function step1(def, target) {
 }
 
 function commitMan(defenders, offPlayers, ballCarrier, diff, G) {
+  const ballInPaint = ballCarrier &&
+    PAINT_ZONES.includes(getTileZone(ballCarrier.col, ballCarrier.row));
+  const paintCenter = { col: 7, row: 10 };
+
   return defenders.map(def => {
-    const target = offPlayers.find(p => p.id === def.manAssignment);
-    let toCol = def.col;
-    let toRow  = def.row;
+    const target    = offPlayers.find(p => p.id === def.manAssignment);
+    const isBallDef = target && def.manAssignment === G.ballCarrierId;
 
-    if (!target) return { defenderId: def.id, toCol, toRow };
+    // d4: free helper with no man assignment
+    if (!target) {
+      let toCol = def.col;
+      let toRow = def.row;
 
-    if (diff === 'rookie' || diff === 'pro') {
-      ({ toCol, toRow } = step1(def, target));
-    }
-
-    if (diff === 'allstar') {
-      if (def.id === 'd4' && ballCarrier &&
-          PAINT_ZONES.includes(getTileZone(ballCarrier.col, ballCarrier.row))) {
-        toCol = 7; toRow = 10;
-      } else {
-        ({ toCol, toRow } = step1(def, target));
+      if (ballInPaint) {
+        // Always collapse toward paint when ball is there
+        ({ toCol, toRow } = step1(def, paintCenter));
+      } else if (['allstar', 'hof', 'legend'].includes(diff) && ballCarrier) {
+        // Cut the most dangerous passing lane
+        ({ toCol, toRow } = step1(def, passingLaneDenial(ballCarrier, offPlayers)));
       }
+      return { defenderId: def.id, toCol, toRow };
     }
 
-    if (diff === 'hof') {
+    let toCol = def.col;
+    let toRow = def.row;
+
+    if (diff === 'rookie') {
+      // Rookies: straight man-follow, no tactics
+      ({ toCol, toRow } = step1(def, target));
+
+    } else if (diff === 'pro') {
+      // Pro: ball defender chases; off-ball shades toward basket (denial)
+      ({ toCol, toRow } = step1(def, isBallDef ? target : denialPosition(target)));
+
+    } else if (diff === 'allstar') {
+      // Allstar: denial stance + paint collapse for off-ball
+      if (isBallDef) {
+        ({ toCol, toRow } = step1(def, target));
+      } else {
+        const denial = denialPosition(target);
+        if (ballInPaint) {
+          // Collapse halfway between denial spot and paint center
+          ({ toCol, toRow } = step1(def, {
+            col: Math.round((denial.col + paintCenter.col) / 2),
+            row: Math.round((denial.row + paintCenter.row) / 2),
+          }));
+        } else {
+          ({ toCol, toRow } = step1(def, denial));
+        }
+      }
+
+    } else if (diff === 'hof') {
+      // HOF: anticipate where the man is going, apply denial to off-ball
       const anticipated = anticipateTarget(target, ballCarrier);
-      ({ toCol, toRow } = step1(def, anticipated));
-    }
+      ({ toCol, toRow } = step1(def, isBallDef ? anticipated : denialPosition(anticipated)));
 
-    if (diff === 'legend') {
-      const legendTarget = legendAnticipate(def, target, ballCarrier, G);
-      ({ toCol, toRow } = step1(def, legendTarget));
+    } else if (diff === 'legend') {
+      // Legend: full pattern read, denial on all off-ball
+      const legendTgt = legendAnticipate(def, target, ballCarrier, G);
+      ({ toCol, toRow } = step1(def, isBallDef ? legendTgt : denialPosition(legendTgt)));
     }
 
     return { defenderId: def.id, toCol, toRow };
@@ -94,32 +164,38 @@ export function chooseCPUScheme(G) {
   const diff    = G.difficulty;
   const history = G.playHistory || [];
 
-  if (diff === 'rookie') return 'man';
+  if (diff === 'rookie') return { scheme: 'man', reason: '' };
 
-  if (diff === 'pro') return Math.random() < 0.7 ? 'man' : 'zone';
+  if (diff === 'pro') {
+    if (Math.random() < 0.7) return { scheme: 'man', reason: '' };
+    return { scheme: 'zone', reason: 'mixing in zone' };
+  }
 
   if (diff === 'allstar') {
     const last = history[history.length - 1];
-    if (!last) return 'man';
-    if (last.scored && last.usedScreen) return 'zone';
-    if (last.scored && last.shotZone?.includes('corner')) return 'man';
-    return G.cpuScheme || 'man';
+    if (!last) return { scheme: 'man', reason: '' };
+    if (last.scored && last.usedScreen)
+      return { scheme: 'zone', reason: 'switching to zone — screen threat' };
+    if (last.scored && last.shotZone?.includes('corner'))
+      return { scheme: 'man', reason: 'doubling corner pressure' };
+    return { scheme: G.cpuScheme || 'man', reason: '' };
   }
 
   if (diff === 'hof') {
     const lastTwo = history.slice(-2);
     if (lastTwo.length === 2 && lastTwo.every(h => h.scored)) {
-      return G.cpuScheme === 'man' ? 'zone' : 'man';
+      const next = G.cpuScheme === 'man' ? 'zone' : 'man';
+      return { scheme: next, reason: 'adjusting after 2 straight scores' };
     }
-    return G.cpuScheme || 'man';
+    return { scheme: G.cpuScheme || 'man', reason: 'reading your tendencies' };
   }
 
   if (diff === 'legend') {
-    if (history.length >= 3) return 'zone';
-    return 'man';
+    if (history.length >= 3) return { scheme: 'zone', reason: 'lockdown zone' };
+    return { scheme: 'man', reason: 'tight man coverage' };
   }
 
-  return 'man';
+  return { scheme: 'man', reason: '' };
 }
 
 export function applyHedge(committedMoves, G, actionQueue) {
@@ -129,8 +205,8 @@ export function applyHedge(committedMoves, G, actionQueue) {
   const ballCarrier = G.pieces.find(p => p.id === G.ballCarrierId);
   if (!hasScreen || !ballCarrier) return committedMoves;
 
-  const result   = committedMoves.map(m => ({ ...m }));
-  const ballDef  = G.pieces.find(
+  const result  = committedMoves.map(m => ({ ...m }));
+  const ballDef = G.pieces.find(
     p => p.role === 'defense' && p.manAssignment === G.ballCarrierId
   );
   if (!ballDef) return result;

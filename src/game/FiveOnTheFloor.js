@@ -40,7 +40,12 @@ export const FiveOnTheFloor = {
 
     // CPU scheme
     cpuScheme: 'man',
+    cpuSchemeReason: '',
     playHistory: [],
+
+    // DDA streak tracking
+    playerScoreStreak: 0,
+    playerScorelessStreak: 0,
 
     // Shot flow
     shotPending: null,
@@ -78,6 +83,9 @@ export const FiveOnTheFloor = {
         G.possession = 0;
         G.playHistory = [];
         G.cpuScheme = 'man';
+        G.cpuSchemeReason = '';
+        G.playerScoreStreak = 0;
+        G.playerScorelessStreak = 0;
         startNewPossession(G);
       },
       noLimit: true,
@@ -314,9 +322,13 @@ export const FiveOnTheFloor = {
           G.score += points;
           G.lastPossessionWasMake = true;
           G.momentum = Math.min(G.momentum + (points === 3 ? 2 : 1), 2);
+          G.playerScoreStreak    = (G.playerScoreStreak    || 0) + 1;
+          G.playerScorelessStreak = 0;
         } else {
           G.momentum = Math.max(G.momentum - 1, -2);
           G.lastPossessionWasMake = false;
+          G.playerScorelessStreak = (G.playerScorelessStreak || 0) + 1;
+          G.playerScoreStreak     = 0;
         }
 
         G.playHistory.push({
@@ -356,7 +368,9 @@ export const FiveOnTheFloor = {
         G.shotResult = null;
         if (G.score >= G.target) { G.gamePhase = 'result'; return; }
         if (G.possession >= G.totalPossessions) { G.gamePhase = 'result'; return; }
-        G.cpuScheme = chooseCPUScheme(G);
+        const { scheme, reason } = chooseCPUScheme(G);
+        G.cpuScheme = scheme;
+        G.cpuSchemeReason = reason;
         startNewPossession(G);
       },
       noLimit: true,
