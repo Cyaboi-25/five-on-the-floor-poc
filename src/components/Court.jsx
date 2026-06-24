@@ -151,6 +151,25 @@ export default function Court({ G, moves }) {
               width={3 * tileW} height={4}
               fill="rgba(255,255,255,0.80)" rx={1} />
 
+        {/* Movement trails — faded dots showing where pieces moved from */}
+        {G.pieces.map(piece =>
+          (piece.trail || []).map((pos, i, arr) => {
+            const opacity = 0.12 + (i / arr.length) * 0.22;
+            const r = piece.role === 'offense' ? 5 : 4;
+            return (
+              <circle
+                key={`${piece.id}-trail-${i}`}
+                cx={pos.col * tileW + tileW / 2}
+                cy={pos.row * tileH + tileH / 2}
+                r={r}
+                fill={piece.role === 'offense'
+                  ? `rgba(232,160,48,${opacity})`
+                  : `rgba(74,158,232,${opacity})`}
+              />
+            );
+          })
+        )}
+
         {/* Screen indicator tile */}
         {screenTile && (
           <rect

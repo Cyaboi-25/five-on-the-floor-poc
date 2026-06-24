@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { chebyshev, getTileZone } from '../game/constants';
 
 export default function ActionBar({ G, moves }) {
   const [passMode,   setPassMode]   = useState(false);
@@ -11,6 +12,25 @@ export default function ActionBar({ G, moves }) {
 
   const offensePieces = G.pieces.filter(p => p.role === 'offense');
   const teammates     = offensePieces.filter(p => p.id !== G.ballCarrierId);
+
+  function computePassCost(receiverId) {
+    const passer   = G.pieces.find(p => p.id === G.ballCarrierId);
+    const receiver = G.pieces.find(p => p.id === receiverId);
+    if (!passer || !receiver) return 1;
+    if (passer.card?.effect?.free_passes) return 1;
+    if (passer.card?.effect?.safe_paint_pass) {
+      const zone = getTileZone(passer.col, passer.row);
+      if (['paint','dunker_l','dunker_r','elbow_l','elbow_r'].includes(zone)) return 1;
+    }
+    const defenders = G.pieces.filter(p => p.role === 'defense');
+    const mid = {
+      col: Math.round((passer.col + receiver.col) / 2),
+      row: Math.round((passer.row + receiver.row) / 2),
+    };
+    return defenders.some(
+      d => chebyshev(d, passer) <= 2 || chebyshev(d, receiver) <= 2 || chebyshev(d, mid) <= 2
+    ) ? 2 : 1;
+  }
 
   function queuePass(receiverId) {
     moves.queueSpecialAction({ type: 'pass', receiverId });
@@ -27,11 +47,17 @@ export default function ActionBar({ G, moves }) {
       <div className="action-bar">
         <div className="pass-targets">
           <span className="action-label">PASS TO:</span>
-          {teammates.map(p => (
-            <button key={p.id} className="action-btn" onClick={() => queuePass(p.id)}>
-              {p.size[0].toUpperCase()}{p.id.slice(1)}
-            </button>
-          ))}
+          {teammates.map(p => {
+            const cost = computePassCost(p.id);
+            return (
+              <button key={p.id} className="action-btn" onClick={() => queuePass(p.id)}>
+                {p.size[0].toUpperCase()}{p.id.slice(1)}
+                <span className="action-cost" style={{ color: cost === 2 ? '#e85050' : '#3dba6e' }}>
+                  {cost} clk
+                </span>
+              </button>
+            );
+          })}
           <button className="action-btn" onClick={() => setPassMode(false)}>✕</button>
         </div>
       </div>

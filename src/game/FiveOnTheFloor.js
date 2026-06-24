@@ -28,6 +28,9 @@ export const FiveOnTheFloor = {
     lastPossessionWasMake: false,
     lastPassDistance: 0,
 
+    // Per-possession tracking
+    mismatchBurstUsed: false,
+
     // Plan phase
     actionQueue: [],
     cpuCommitted: [],
@@ -116,7 +119,18 @@ export const FiveOnTheFloor = {
         if (!piece || piece.role !== 'offense') return INVALID_MOVE;
         if (toCol < 0 || toCol > 15 || toRow < 0 || toRow > 13) return INVALID_MOVE;
         const dist = chebyshev(piece, { col: toCol, row: toRow });
-        if (dist < 1 || dist > piece.speed) return INVALID_MOVE;
+        const defenders = G.pieces.filter(p => p.role === 'defense');
+        const nearestDefSize = defenders.length
+          ? defenders.reduce((best, d) => {
+              const dd = chebyshev(d, piece);
+              return dd < chebyshev(best, piece) ? d : best;
+            }, defenders[0]).size
+          : null;
+        const burstEligible = piece.card?.effect?.mismatch_burst &&
+          !G.mismatchBurstUsed && nearestDefSize === 'large';
+        const maxDist = burstEligible ? piece.speed + 2 : piece.speed;
+        if (dist < 1 || dist > maxDist) return INVALID_MOVE;
+        if (burstEligible && dist > piece.speed) G.mismatchBurstUsed = true;
 
         G.actionQueue = G.actionQueue.filter(
           a => !(a.type === 'move' && a.pieceId === pieceId)
@@ -284,7 +298,7 @@ export const FiveOnTheFloor = {
         // ── Step 8: Three-second rule ──
         G.pieces.filter(p => p.role === 'offense').forEach(p => {
           if (p.paintTurns >= 3) {
-            G.clock -= 2;
+            G.clock -= 3;
             p.paintTurns = 0;
             p.threeSecViolation = true;
           } else {
@@ -332,7 +346,9 @@ export const FiveOnTheFloor = {
         }
 
         G.playHistory.push({
+          possession: G.possession,
           scored: made,
+          points: made ? points : 0,
           shotZone: G.shotResult.zone,
           usedScreen: G.lastTurnUsedScreen,
           passedRight: G.lastPassedRight,
@@ -389,6 +405,7 @@ export const FiveOnTheFloor = {
 function startNewPossession(G) {
   G.possession += 1;
   G.clock = 24;
+  G.mismatchBurstUsed = false;
   G.actionQueue = [];
   G.cpuCommitted = [];
   G.screenersThisTurn = [];
@@ -440,7 +457,15 @@ function startNewPossession(G) {
     })),
   ];
 
-  G.ballCarrierId = G.playerRoster[0]?.id || 'o0';
+  // Apply speed_boost cards and find ball_handler starter
+  let ballStarterId = G.playerRoster[0]?.id || 'o0';
+  G.pieces.forEach(p => {
+    if (p.role !== 'offense') return;
+    if (p.card?.effect?.speed_boost) p.speed = 2;
+    if (p.card?.effect?.can_start_ball) ballStarterId = p.id;
+  });
+  G.ballCarrierId = ballStarterId;
+  G.mismatchBurstUsed = false;
 }
 
 function getPassCost(G, passer, receiver) {

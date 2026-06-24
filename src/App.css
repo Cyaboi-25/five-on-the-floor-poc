@@ -532,3 +532,61 @@ body { background: var(--bg); color: var(--text); font-family: system-ui, sans-s
   70%  { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* ── HUD wrap + possession log ───────────────────────────────────── */
+.hud-wrap { display: flex; flex-direction: column; }
+.poss-log {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 6px 12px; display: flex; flex-direction: column; gap: 3px;
+  max-height: 120px; overflow-y: auto;
+}
+.poss-log-row {
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'Courier New'; font-size: 10px;
+}
+.log-made { color: var(--make); }
+.log-miss { color: var(--muted); }
+.log-poss { min-width: 20px; }
+.log-zone { flex: 1; }
+.log-pts  { min-width: 36px; text-align: right; }
+.log-tag  { font-size: 9px; background: var(--surface2); padding: 1px 4px; border-radius: 3px; color: var(--offense); }
+
+/* ── Cards button ────────────────────────────────────────────────── */
+.cards-btn {
+  font-size: 9px; padding: 3px 8px;
+  background: var(--surface2); border-radius: 4px;
+  border: 1px solid var(--border); color: var(--muted);
+  letter-spacing: 1px; cursor: pointer;
+}
+.cards-btn:hover { border-color: var(--offense); color: var(--offense); }
+
+/* ── Card modal ──────────────────────────────────────────────────── */
+.card-modal-overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.65);
+  display: flex; align-items: center; justify-content: center; z-index: 20;
+}
+.card-modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px; width: 320px; max-height: 80vh;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
+}
+.card-modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 4px;
+}
+.card-modal-title { font-family: 'Courier New'; font-size: 11px; letter-spacing: 2px; color: var(--muted); }
+.card-modal-close { background: none; border: none; color: var(--muted); font-size: 14px; cursor: pointer; }
+.card-modal-section-title {
+  font-family: 'Courier New'; font-size: 9px; letter-spacing: 2px;
+  color: var(--muted); border-bottom: 1px solid var(--border); padding-bottom: 3px;
+}
+.card-modal-row { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; }
+.card-modal-piece {
+  font-family: 'Courier New'; font-size: 11px; font-weight: bold;
+  color: var(--offense); min-width: 28px;
+}
+.card-modal-card { display: flex; flex-direction: column; gap: 1px; flex: 1; }
+.card-modal-name { font-size: 11px; color: var(--text); font-weight: 600; }
+.card-modal-stars { font-size: 10px; }
+.card-modal-desc { font-size: 10px; color: var(--muted); }
+.card-modal-none { font-size: 10px; color: #333; font-style: italic; }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import MenuScreen    from './MenuScreen';
 import LineupScreen  from './LineupScreen';
 import ScoutScreen   from './ScoutScreen';
@@ -7,11 +7,26 @@ import HUD           from './HUD';
 import PlanQueue     from './PlanQueue';
 import ActionBar     from './ActionBar';
 import MomentumTrack from './MomentumTrack';
+import CardModal     from './CardModal';
 import ShotPreview   from './ShotPreview';
 import DiceOverlay   from './DiceOverlay';
 import ResultScreen  from './ResultScreen';
 
 export default function Board({ G, ctx, moves }) {
+  const [defToast, setDefToast]   = useState(false);
+  const [cardModal, setCardModal] = useState(false);
+  const prevQueueLen = useRef(0);
+
+  useEffect(() => {
+    const curr = (G.actionQueue || []).length;
+    if (prevQueueLen.current > 0 && curr === 0 && !G.shotPending) {
+      setDefToast(true);
+      const t = setTimeout(() => setDefToast(false), 1500);
+      return () => clearTimeout(t);
+    }
+    prevQueueLen.current = curr;
+  }, [G.actionQueue, G.shotPending]);
+
   switch (G.gamePhase) {
     case 'menu':   return <MenuScreen moves={moves} />;
     case 'lineup': return <LineupScreen G={G} moves={moves} />;
@@ -69,7 +84,7 @@ export default function Board({ G, ctx, moves }) {
           {/* Special action buttons */}
           <ActionBar G={G} moves={moves} />
 
-          {/* Bottom bar: scheme + momentum */}
+          {/* Bottom bar: scheme + cards button + momentum */}
           <div className="bottom-bar">
             <div className="scheme-wrap">
               <div className="scheme-badge">
@@ -79,8 +94,18 @@ export default function Board({ G, ctx, moves }) {
                 <div className="scheme-reason">{G.cpuSchemeReason}</div>
               ) : null}
             </div>
+            <button className="cards-btn" onClick={() => setCardModal(true)}>CARDS</button>
             <MomentumTrack momentum={G.momentum} />
           </div>
+
+          {cardModal && <CardModal G={G} onClose={() => setCardModal(false)} />}
+
+          {/* Defense responds toast */}
+          {defToast && (
+            <div className="reversal-toast" style={{ bottom: 240 }}>
+              Defense responded — {G.cpuScheme === 'zone' ? 'zone rotates' : 'man coverage shifts'}
+            </div>
+          )}
 
           {/* Ball reversal toast */}
           {G.ballReversal && (

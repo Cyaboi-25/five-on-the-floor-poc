@@ -131,6 +131,14 @@ function commitMan(defenders, offPlayers, ballCarrier, diff, G) {
       ({ toCol, toRow } = step1(def, isBallDef ? legendTgt : denialPosition(legendTgt)));
     }
 
+    // HOF+: sag off far men — if assigned man is 5+ tiles from ball, cheat toward paint
+    if (['hof', 'legend'].includes(diff) && !isBallDef && target && ballCarrier) {
+      const manToBall = chebyshev(target, ballCarrier);
+      if (manToBall >= 5) {
+        ({ toCol, toRow } = step1({ col: toCol, row: toRow }, paintCenter));
+      }
+    }
+
     return { defenderId: def.id, toCol, toRow };
   });
 }
