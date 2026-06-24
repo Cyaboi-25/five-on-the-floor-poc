@@ -74,26 +74,26 @@ button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-h
 .scout-card-name{font-size:0.6rem;color:var(--gold)}
 
 /* SCREEN 4 — GAME */
-#screen-game{padding:0;width:100%}
+#screen-game{padding:0;width:100%;height:100vh;max-height:100vh;overflow:hidden}
 .game-header{display:flex;justify-content:space-between;align-items:center;
-  padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);
-  font-size:0.8rem;width:100%}
-.ball-info{padding:6px 12px;background:var(--surface2);font-size:0.7rem;
-  width:100%;text-align:center;border-bottom:1px solid var(--border)}
-.court-wrap{width:100%;position:relative;overflow:hidden}
-.court-svg{width:100%;display:block}
-.action-bar{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;
+  padding:4px 12px;background:var(--surface);border-bottom:1px solid var(--border);
+  font-size:0.75rem;width:100%;flex-shrink:0}
+.ball-info{padding:3px 12px;background:var(--surface2);font-size:0.65rem;
+  width:100%;text-align:center;border-bottom:1px solid var(--border);flex-shrink:0}
+.court-wrap{width:100%;position:relative;overflow:hidden;flex:1;display:flex;align-items:center;justify-content:center}
+.court-svg{width:100%;max-height:100%;display:block}
+.action-bar{display:flex;gap:6px;padding:4px 12px;overflow-x:auto;
   background:var(--surface);border-top:1px solid var(--border);width:100%;
-  -webkit-overflow-scrolling:touch}
-.action-btn{padding:8px 14px;border-radius:8px;font-size:0.75rem;font-weight:600;
+  -webkit-overflow-scrolling:touch;flex-shrink:0}
+.action-btn{padding:6px 12px;border-radius:8px;font-size:0.7rem;font-weight:600;
   background:var(--surface2);color:var(--text);border:1px solid var(--border);
   white-space:nowrap;flex-shrink:0;transition:all 0.15s}
 .action-btn.shoot{background:var(--green);color:#000;border-color:var(--green)}
 .action-btn:disabled{opacity:0.25;pointer-events:none}
 .action-btn:active:not(:disabled){transform:scale(0.95)}
 .bottom-bar{display:flex;justify-content:space-between;align-items:center;
-  padding:8px 12px;background:var(--surface);border-top:1px solid var(--border);
-  width:100%;font-size:0.75rem}
+  padding:4px 12px;background:var(--surface);border-top:1px solid var(--border);
+  width:100%;font-size:0.7rem;flex-shrink:0}
 .ap-dots{display:flex;gap:4px}
 .ap-dot{width:14px;height:14px;border-radius:50%;background:var(--gold)}
 .ap-dot.spent{background:var(--muted);opacity:0.25}
@@ -157,13 +157,13 @@ button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-h
   <h2 style="margin-top:12px">YOUR LINEUP</h2>
   <div class="subtitle" id="diff-label"></div>
   <div class="roster-row" id="roster-row"></div>
-  <div class="budget-bar" id="budget-bar"></div>
-  <div id="card-section-label" style="text-align:center;font-size:0.8rem;color:var(--muted);margin-bottom:8px"></div>
-  <div class="card-pool" id="card-pool"></div>
-  <div id="assign-instructions" style="text-align:center;font-size:0.75rem;color:var(--muted);margin:8px 0;display:none">
-    Tap a card below your piece, then tap a piece to assign it.
+  <div id="roll-section" style="text-align:center;margin:8px 0">
+    <div id="roll-label" style="font-size:0.8rem;color:var(--muted);margin-bottom:8px"></div>
+    <div id="rolled-cards" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;min-height:60px"></div>
+    <div id="roll-actions" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"></div>
   </div>
-  <button class="btn btn-primary" id="confirm-lineup-btn" disabled onclick="confirmLineup()">CONFIRM LINEUP</button>
+  <div id="assign-instructions" style="text-align:center;font-size:0.75rem;color:var(--gold);margin:8px 0;display:none"></div>
+  <button class="btn btn-primary" id="confirm-lineup-btn" onclick="confirmLineup()">CONFIRM LINEUP</button>
 </div>
 
 <!-- SCREEN 3 — SCOUTING -->
@@ -470,137 +470,139 @@ function initLineup(){
   state.roster=generateRoster();
   state.selectedCards=[];
   state.assignMode=null;
-  const d=state.difficulty;
+  state.rollsLeft=3;
+  state.currentRoll=[];
+  state.keptCards=[];
   document.getElementById('diff-label').textContent=`${TIERS[state.tierIdx].name} — Target: ${TIERS[state.tierIdx].target} pts`;
-
-  let budget=3;
-  // Deal or pick cards based on difficulty
-  if(d==='rookie'||d==='pro'){
-    renderCardPool(budget);
-    document.getElementById('card-section-label').textContent='Pick cards (budget: 3 points)';
-  } else if(d==='all_star'){
-    const dealt=dealRandomCards(3,null);
-    state.selectedCards=dealt;
-    document.getElementById('card-section-label').textContent='Your dealt cards (assign to pieces)';
-    renderDealtCards();
-  } else if(d==='hof'){
-    const dealt=dealRandomCards(3,'hof');
-    state.selectedCards=dealt;
-    document.getElementById('card-section-label').textContent='Your dealt cards (one HoF+ guaranteed)';
-    renderDealtCards();
-  } else {
-    const dealt=dealRandomCards(1,null);
-    state.selectedCards=dealt;
-    document.getElementById('card-section-label').textContent='Your single dealt card';
-    renderDealtCards();
-  }
+  document.getElementById('assign-instructions').style.display='none';
   renderRoster();
-  updateConfirmBtn();
+  renderRollUI();
 }
 
-function dealRandomCards(count,guaranteeMin){
+function rollCards(){
+  if(state.rollsLeft<=0)return;
+  state.rollsLeft--;
   const allKeys=Object.keys(CARDS);
-  const result=[];
-  if(guaranteeMin){
-    const hof=allKeys.filter(k=>CARDS[k].rarity==='hof'||CARDS[k].rarity==='franchise');
-    result.push({key:pick(hof),...CARDS[pick(hof)]});
-    // Fix: pick properly
-    const hk=pick(hof);
-    result.length=0;
-    result.push({key:hk,...CARDS[hk]});
+  const count=state.difficulty==='legend'?1:3;
+  const rolled=[];
+  // HOF+: guarantee at least one HoF/Franchise card
+  if(state.difficulty==='hof'||state.difficulty==='legend'){
+    const hofKeys=allKeys.filter(k=>CARDS[k].rarity==='hof'||CARDS[k].rarity==='franchise');
+    const hk=pick(hofKeys);
+    rolled.push({key:hk,...CARDS[hk]});
   }
-  while(result.length<count){
+  while(rolled.length<count){
     const k=pick(allKeys);
-    if(!result.find(c=>c.key===k)){result.push({key:k,...CARDS[k]})}
+    if(!rolled.find(c=>c.key===k))rolled.push({key:k,...CARDS[k]});
   }
-  return result;
+  state.currentRoll=rolled;
+  renderRollUI();
 }
 
-let budgetRemaining=3;
-function renderCardPool(budget){
-  budgetRemaining=budget;
-  const pool=document.getElementById('card-pool');
-  pool.innerHTML='';
-  const rarityOrder=['all_star','superstar','hof','franchise'];
-  const sorted=Object.entries(CARDS).sort((a,b)=>rarityOrder.indexOf(a[1].rarity)-rarityOrder.indexOf(b[1].rarity));
-  sorted.forEach(([key,card])=>{
-    const div=document.createElement('div');
-    div.className='card-item';
-    div.dataset.key=key;
-    div.innerHTML=`<div class="card-stars">${card.label}</div><div class="card-name">${card.name}</div>
-      <div class="card-cost">${card.cost}pt</div><div class="card-desc">${card.description}</div>
-      <div class="card-elig">${card.eligible.map(s=>s[0].toUpperCase()).join('/')}</div>`;
-    div.onclick=()=>toggleCardSelection(key);
-    pool.appendChild(div);
-  });
-  updateCardPool();
-  updateBudgetBar();
-}
-
-function toggleCardSelection(key){
-  const idx=state.selectedCards.findIndex(c=>c.key===key);
-  if(idx>=0){
-    state.selectedCards.splice(idx,1);
-    budgetRemaining+=CARDS[key].cost;
-    // Unassign if was assigned
-    state.roster.forEach(p=>{if(p.card&&p.card.key===key)p.card=null});
-  } else {
-    if(budgetRemaining>=CARDS[key].cost){
-      state.selectedCards.push({key,...CARDS[key]});
-      budgetRemaining-=CARDS[key].cost;
-    }
-  }
-  updateCardPool();
-  updateBudgetBar();
+function keepCards(){
+  state.keptCards=state.currentRoll.slice();
+  state.selectedCards=state.keptCards.slice();
+  state.currentRoll=[];
+  // Auto-assign cards to eligible pieces
+  autoAssignCards();
   renderRoster();
-  updateConfirmBtn();
+  renderRollUI();
 }
 
-function updateCardPool(){
-  document.querySelectorAll('#card-pool .card-item').forEach(el=>{
-    const k=el.dataset.key;
-    const sel=state.selectedCards.find(c=>c.key===k);
-    el.classList.toggle('selected',!!sel);
-    el.classList.toggle('disabled',!sel&&budgetRemaining<CARDS[k].cost);
+function autoAssignCards(){
+  // Clear all assignments
+  state.roster.forEach(p=>{p.card=null;p.speed=p.size==='small'?2:1});
+  const unassigned=[...state.keptCards];
+  // Assign each card to the first eligible piece without a card
+  unassigned.forEach(card=>{
+    const piece=state.roster.find(p=>!p.card&&card.eligible.includes(p.size));
+    if(piece){
+      piece.card=card;
+      if(card.effect.speed)piece.speed=card.effect.speed;
+    }
   });
 }
 
-function updateBudgetBar(){
-  const bar=document.getElementById('budget-bar');
-  bar.innerHTML='';
-  for(let i=0;i<3;i++){
-    const d=document.createElement('span');
-    d.className='budget-dot'+(i<budgetRemaining?'':' spent');
-    d.textContent=i<budgetRemaining?'●':'○';
-    bar.appendChild(d);
+function renderRollUI(){
+  const label=document.getElementById('roll-label');
+  const cardsDiv=document.getElementById('rolled-cards');
+  const actionsDiv=document.getElementById('roll-actions');
+  cardsDiv.innerHTML='';
+  actionsDiv.innerHTML='';
+
+  if(state.keptCards.length>0&&state.currentRoll.length===0){
+    // Cards already kept — show them with reassign option
+    label.textContent=`Your cards (${state.rollsLeft} roll${state.rollsLeft!==1?'s':''} left)`;
+    state.keptCards.forEach(card=>{
+      const div=document.createElement('div');
+      div.className='card-item dealt';
+      div.innerHTML=`<div class="card-stars">${card.label}</div><div class="card-name">${card.name}</div>
+        <div class="card-desc">${card.description}</div>
+        <div class="card-elig">${card.eligible.map(s=>s[0].toUpperCase()).join('/')}</div>`;
+      div.onclick=()=>startAssign(card.key);
+      cardsDiv.appendChild(div);
+    });
+    if(state.rollsLeft>0){
+      const rerollBtn=document.createElement('button');
+      rerollBtn.className='btn btn-secondary';
+      rerollBtn.style.cssText='max-width:200px;justify-content:center;font-size:0.85rem';
+      rerollBtn.textContent=`🎲 Re-roll (${state.rollsLeft} left)`;
+      rerollBtn.onclick=()=>{state.keptCards=[];state.selectedCards=[];state.roster.forEach(p=>{p.card=null;p.speed=p.size==='small'?2:1});rollCards();renderRoster()};
+      actionsDiv.appendChild(rerollBtn);
+    }
+    document.getElementById('assign-instructions').style.display='block';
+    document.getElementById('assign-instructions').textContent='Tap a card then tap a piece to reassign';
+    return;
   }
-}
 
-function renderDealtCards(){
-  const pool=document.getElementById('card-pool');
-  pool.innerHTML='';
-  state.selectedCards.forEach((card,i)=>{
-    const div=document.createElement('div');
-    div.className='card-item dealt';
-    div.dataset.key=card.key;
-    div.innerHTML=`<div class="card-stars">${card.label}</div><div class="card-name">${card.name}</div>
-      <div class="card-desc">${card.description}</div>
-      <div class="card-elig">${card.eligible.map(s=>s[0].toUpperCase()).join('/')}</div>`;
-    div.onclick=()=>startAssign(card.key);
-    pool.appendChild(div);
-  });
-  document.getElementById('budget-bar').innerHTML='';
-  document.getElementById('assign-instructions').style.display='block';
+  if(state.currentRoll.length>0){
+    // Show current roll — keep or re-roll
+    label.textContent=`Roll result (${state.rollsLeft} roll${state.rollsLeft!==1?'s':''} left)`;
+    state.currentRoll.forEach(card=>{
+      const div=document.createElement('div');
+      div.className='card-item dealt';
+      div.innerHTML=`<div class="card-stars">${card.label}</div><div class="card-name">${card.name}</div>
+        <div class="card-desc">${card.description}</div>
+        <div class="card-elig">${card.eligible.map(s=>s[0].toUpperCase()).join('/')}</div>`;
+      cardsDiv.appendChild(div);
+    });
+    const keepBtn=document.createElement('button');
+    keepBtn.className='btn btn-primary';
+    keepBtn.style.cssText='max-width:180px;font-size:0.85rem;margin:0';
+    keepBtn.textContent='✓ Keep these';
+    keepBtn.onclick=keepCards;
+    actionsDiv.appendChild(keepBtn);
+    if(state.rollsLeft>0){
+      const rerollBtn=document.createElement('button');
+      rerollBtn.className='btn btn-secondary';
+      rerollBtn.style.cssText='max-width:180px;font-size:0.85rem;margin:0';
+      rerollBtn.textContent=`🎲 Re-roll (${state.rollsLeft} left)`;
+      rerollBtn.onclick=rollCards;
+      actionsDiv.appendChild(rerollBtn);
+    }
+    document.getElementById('assign-instructions').style.display='none';
+    return;
+  }
+
+  // No roll yet
+  label.textContent='Roll for cards — 3 attempts';
+  const rollBtn=document.createElement('button');
+  rollBtn.className='btn btn-primary';
+  rollBtn.style.cssText='max-width:240px;font-size:1rem;margin:0';
+  rollBtn.textContent='🎲 ROLL FOR CARDS';
+  rollBtn.onclick=rollCards;
+  actionsDiv.appendChild(rollBtn);
+  document.getElementById('assign-instructions').style.display='none';
 }
 
 function startAssign(cardKey){
   state.assignMode=cardKey;
-  // Unassign from any piece that has this card
   state.roster.forEach(p=>{if(p.card&&p.card.key===cardKey)p.card=null});
   renderRoster();
-  // Highlight dealt card
-  document.querySelectorAll('#card-pool .card-item').forEach(el=>{
-    el.classList.toggle('selected',el.dataset.key===cardKey);
+  document.querySelectorAll('#rolled-cards .card-item').forEach(el=>{
+    const name=el.querySelector('.card-name').textContent;
+    const card=state.keptCards.find(c=>c.name===name);
+    el.style.borderColor=(card&&card.key===cardKey)?'var(--gold)':'rgba(61,186,110,0.5)';
   });
 }
 
@@ -622,8 +624,6 @@ function renderRoster(){
       } else {
         div.onclick=()=>assignCard(i);
       }
-    } else if(state.difficulty==='rookie'||state.difficulty==='pro'){
-      // In pick mode, clicking piece does nothing special
     }
     row.appendChild(div);
   });
@@ -633,49 +633,17 @@ function assignCard(pieceIdx){
   if(!state.assignMode)return;
   const card={key:state.assignMode,...CARDS[state.assignMode]};
   state.roster[pieceIdx].card=card;
-  // Apply speed from card
-  if(card.effect.speed) state.roster[pieceIdx].speed=card.effect.speed;
+  if(card.effect.speed)state.roster[pieceIdx].speed=card.effect.speed;
   state.assignMode=null;
   renderRoster();
-  document.querySelectorAll('#card-pool .card-item').forEach(el=>el.classList.remove('selected'));
-  // For pick mode, also enable assign
-  if(state.difficulty==='rookie'||state.difficulty==='pro'){
-    document.getElementById('assign-instructions').style.display='block';
-    // Re-render the card pool items as clickable for assign
-  }
-  updateConfirmBtn();
-}
-
-function updateConfirmBtn(){
-  const btn=document.getElementById('confirm-lineup-btn');
-  // Can confirm if we have at least some cards selected (or dealt)
-  const hasCards=state.selectedCards.length>0;
-  btn.disabled=false; // Always allow confirm, player might want to go cardless
+  renderRollUI();
 }
 
 function confirmLineup(){
-  // If pick mode, prompt assignment of unassigned cards
-  if(state.difficulty==='rookie'||state.difficulty==='pro'){
-    const unassigned=state.selectedCards.filter(c=>!state.roster.find(p=>p.card&&p.card.key===c.key));
-    if(unassigned.length>0&&!state.assignMode){
-      state.assignMode=unassigned[0].key;
-      document.getElementById('assign-instructions').style.display='block';
-      document.getElementById('assign-instructions').textContent=`Tap a piece to assign "${unassigned[0].name}" (or confirm to skip)`;
-      renderRoster();
-      document.querySelectorAll('#card-pool .card-item').forEach(el=>{
-        el.classList.toggle('selected',el.dataset.key===unassigned[0].key);
-      });
-      // Second click on confirm = skip assignment
-      if(state._confirmCount){
-        state.assignMode=null;
-        showScreen('scouting');
-        initScouting();
-        state._confirmCount=0;
-        return;
-      }
-      state._confirmCount=1;
-      return;
-    }
+  // If no cards kept and rolls remain, must roll first (but allow skip)
+  if(state.currentRoll.length>0){
+    keepCards();
+    return;
   }
   state.assignMode=null;
   showScreen('scouting');
@@ -803,7 +771,10 @@ let courtW,courtH,tileW,tileH;
 
 function renderCourt(){
   const wrap=document.getElementById('court-wrap');
-  const w=Math.min(window.innerWidth,600);
+  const availH=wrap.clientHeight||400;
+  const availW=wrap.clientWidth||Math.min(window.innerWidth,600);
+  const aspectW=availH*(16/14);
+  const w=Math.min(availW,aspectW,600);
   const h=Math.round(w*(14/16));
   courtW=w;courtH=h;tileW=w/COLS;tileH=h/ROWS;
 
