@@ -130,15 +130,10 @@ button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-h
   font-size:0.8rem;max-width:360px;width:100%}
 .result-summary div{padding:4px 0;display:flex;justify-content:space-between}
 
-/* Pass target select overlay */
-.pass-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);
-  display:none;z-index:50;align-items:center;justify-content:center;flex-direction:column;padding:24px}
-.pass-overlay.active{display:flex}
-.pass-option{background:var(--surface2);border:1px solid var(--border);border-radius:10px;
-  padding:12px 20px;margin:6px;font-size:0.85rem;color:var(--text);width:100%;max-width:300px;
-  display:flex;justify-content:space-between;cursor:pointer}
-.pass-option:hover{border-color:var(--gold)}
-.pass-cancel{margin-top:12px;color:var(--muted);font-size:0.8rem;cursor:pointer;background:none;border:none}
+/* Back button */
+.back-btn{position:absolute;top:12px;left:12px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:6px 12px;font-size:0.75rem;color:var(--muted);cursor:pointer;z-index:10}
+.back-btn:hover{background:var(--surface);color:var(--text)}
 </style>
 </head>
 <body>
@@ -153,7 +148,8 @@ button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-h
 </div>
 
 <!-- SCREEN 2 — LINEUP -->
-<div id="screen-lineup" class="screen">
+<div id="screen-lineup" class="screen" style="position:relative">
+  <button class="back-btn" onclick="showScreen('select')">← Back</button>
   <h2 style="margin-top:12px">YOUR LINEUP</h2>
   <div class="subtitle" id="diff-label"></div>
   <div class="roster-row" id="roster-row"></div>
@@ -167,7 +163,8 @@ button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-h
 </div>
 
 <!-- SCREEN 3 — SCOUTING -->
-<div id="screen-scouting" class="screen">
+<div id="screen-scouting" class="screen" style="position:relative">
+  <button class="back-btn" onclick="showScreen('lineup')">← Back</button>
   <h2 style="margin-top:12px">OPPONENT SCOUTING</h2>
   <p class="subtitle">Study their defense before you play.</p>
   <div class="scout-cols" id="scout-cols"></div>
@@ -177,6 +174,7 @@ button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-h
 <!-- SCREEN 4 — GAME -->
 <div id="screen-game" class="screen">
   <div class="game-header">
+    <button class="back-btn" style="position:static;padding:4px 8px;font-size:0.65rem" onclick="if(confirm('Quit this game?'))showScreen('select')">✕ Quit</button>
     <span id="poss-label">Possession 1/10</span>
     <span id="score-label" style="font-family:'Courier New',monospace">Score: 0 / 10</span>
   </div>
@@ -265,12 +263,6 @@ button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-h
   </div>
 </div>
 
-<!-- PASS OVERLAY -->
-<div class="pass-overlay" id="pass-overlay">
-  <h3 style="margin-bottom:12px">Pass to...</h3>
-  <div id="pass-options"></div>
-  <button class="pass-cancel" onclick="closePassOverlay()">Cancel</button>
-</div>
 
 <script>
 // ========================================
@@ -295,6 +287,7 @@ let state = {
   offense:[],defense:[],
   manAssign:{}, // d_id -> o_id
   lastPassDistance:0,
+  passMode:false,
   possessionStats:{made:0,missed:0,bestPoss:0,bestPossScore:0,totalPossScore:0},
   cpuAnimating:false,
   assignMode:null, // card key being assigned
@@ -747,7 +740,7 @@ function startPossession(){
   state.possession++;
   state.clock=24;state.actionPoints=3;state.turnFirstAction=true;
   state.selectedPiece=null;state.lastPassDistance=0;
-  state.cpuAnimating=false;
+  state.cpuAnimating=false;state.passMode=false;
   // OFFENSE POSITIONS
   state.offense=state.roster.map((p,i)=>{
     const starts=[{col:8,row:0},{col:2,row:3},{col:8,row:3},{col:13,row:3},{col:10,row:6}];
@@ -931,8 +924,23 @@ function processCourtClick(px,py){
   const row=Math.floor(py/tileH);
   if(col<0||col>=COLS||row<0||row>=ROWS)return;
 
-  // Check if clicking on an offense piece
   const clickedPiece=state.offense.find(p=>p.col===col&&p.row===row);
+
+  // PASS MODE: clicking a teammate passes to them
+  if(state.passMode){
+    if(clickedPiece&&clickedPiece.id!==state.ballCarrier.id){
+      const cost=passCost(state.ballCarrier,clickedPiece);
+      if(cost<=state.actionPoints){
+        state.passMode=false;
+        executePass(clickedPiece,cost);
+        return;
+      }
+    }
+    // Clicking anything else cancels pass mode
+    state.passMode=false;
+    renderCourt();updateGameUI();
+    return;
+  }
 
   if(state.selectedPiece){
     if(clickedPiece&&clickedPiece.id===state.selectedPiece.id){
@@ -940,14 +948,12 @@ function processCourtClick(px,py){
       renderCourt();updateGameUI();
       return;
     }
-    // Check if it's a valid destination
     const valid=getValidMoves(state.selectedPiece);
     const dest=valid.find(v=>v.col===col&&v.row===row);
     if(dest){
       movePiece(state.selectedPiece,col,row);
       return;
     }
-    // If clicked another piece, select it
     if(clickedPiece){
       state.selectedPiece=clickedPiece;
       renderCourt();updateGameUI();
@@ -973,8 +979,8 @@ function getValidMoves(piece){
       if(dc===0&&dr===0)continue;
       const nc=piece.col+dc,nr=piece.row+dr;
       if(nc<0||nc>=COLS||nr<0||nr>=ROWS)continue;
-      // Can't move onto another offense piece
-      if(state.offense.find(p=>p.id!==piece.id&&p.col===nc&&p.row===nr))continue;
+      // Can't move onto any occupied tile
+      if(isTileOccupied(nc,nr,piece.id))continue;
       moves.push({col:nc,row:nr,dist:Math.max(Math.abs(dc),Math.abs(dr))});
     }
   }
@@ -1034,10 +1040,16 @@ function updateGameUI(){
   // Ball info
   const bc=state.ballCarrier;
   if(bc){
-    const z=getZone(bc.col,bc.row);
-    const pts=THRESHOLDS[z]?THRESHOLDS[z][3]:0;
-    document.getElementById('ball-info').textContent=
-      `🏀 ${bc.label}${bc.idx+1} has ball · ${zoneName(z)} · ${pts}pts · ${getShotRating(bc)}`;
+    if(state.passMode){
+      document.getElementById('ball-info').textContent='🏀 PASS MODE — Click a highlighted teammate';
+      document.getElementById('ball-info').style.color='var(--green)';
+    } else {
+      document.getElementById('ball-info').style.color='';
+      const z=getZone(bc.col,bc.row);
+      const pts=THRESHOLDS[z]?THRESHOLDS[z][3]:0;
+      document.getElementById('ball-info').textContent=
+        `🏀 ${bc.label}${bc.idx+1} has ball · ${zoneName(z)} · ${pts}pts · ${getShotRating(bc)}`;
+    }
   }
 
   // Action points
@@ -1134,9 +1146,16 @@ function renderActionBar(){
     // Pass
     const passBtn=document.createElement('button');
     passBtn.className='action-btn';
-    passBtn.textContent='Pass';
-    passBtn.disabled=state.actionPoints<=0;
-    passBtn.onclick=()=>showPassOptions();
+    if(state.passMode){
+      passBtn.textContent='Passing... (click teammate)';
+      passBtn.style.borderColor='var(--green)';
+      passBtn.style.color='var(--green)';
+      passBtn.onclick=()=>{state.passMode=false;renderCourt();updateGameUI()};
+    } else {
+      passBtn.textContent='Pass';
+      passBtn.disabled=state.actionPoints<=0;
+      passBtn.onclick=()=>activatePassMode();
+    }
     bar.appendChild(passBtn);
   } else {
     // Off-ball: Cut (tap-to-move), Screen, Space
@@ -1176,28 +1195,27 @@ function passCost(passer,receiver){
   return inLane?2:1;
 }
 
-function showPassOptions(){
-  const overlay=document.getElementById('pass-overlay');
-  const opts=document.getElementById('pass-options');
-  opts.innerHTML='';
+function activatePassMode(){
+  state.passMode=true;
+  renderCourt();updateGameUI();
+  showPassHighlights();
+}
+
+function showPassHighlights(){
+  const svg=document.querySelector('.court-svg');
+  const hGroup=svg.querySelector('#highlights');
+  hGroup.innerHTML='';
   const passer=state.ballCarrier;
   state.offense.filter(p=>p.id!==passer.id).forEach(p=>{
     const cost=passCost(passer,p);
     if(cost>state.actionPoints)return;
-    const div=document.createElement('button');
-    div.className='pass-option';
-    const z=getZone(p.col,p.row);
-    div.innerHTML=`<span>${p.label}${p.idx+1} — ${zoneName(z)}</span><span style="color:var(--gold)">${cost}pt${cost>1?' (contested)':''}</span>`;
-    div.onclick=()=>executePass(p,cost);
-    opts.appendChild(div);
+    const cx=(p.col+0.5)*tileW, cy=(p.row+0.5)*tileH;
+    hGroup.innerHTML+=`<circle cx="${cx}" cy="${cy}" r="${tileW*0.7}" fill="none" stroke="var(--green)" stroke-width="2.5" opacity="0.7">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="1s" repeatCount="indefinite"/></circle>`;
   });
-  overlay.classList.add('active');
 }
 
-function closePassOverlay(){document.getElementById('pass-overlay').classList.remove('active')}
-
 function executePass(receiver,cost){
-  closePassOverlay();
   state.lastPassDistance=chebyshevDist(state.ballCarrier,receiver);
   state.ballCarrier=receiver;
   state.actionPoints-=cost;
@@ -1560,12 +1578,34 @@ function cpuRespond(movedPiece){
   },400);
 }
 
+function isTileOccupied(col,row,excludeId){
+  return state.offense.some(p=>p.id!==excludeId&&p.col===col&&p.row===row)||
+         state.defense.some(p=>p.id!==excludeId&&p.col===col&&p.row===row);
+}
+
 function followTarget(defender,target){
   const dCol=Math.sign(target.col-defender.col);
   const dRow=Math.sign(target.row-defender.row);
+  const nc=clamp(defender.col+dCol,0,COLS-1);
+  const nr=clamp(defender.row+dRow,0,ROWS-1);
+  if(nc===defender.col&&nr===defender.row)return;
+  if(isTileOccupied(nc,nr,defender.id)){
+    // Try horizontal only
+    const hc=clamp(defender.col+dCol,0,COLS-1);
+    if(!isTileOccupied(hc,defender.row,defender.id)&&hc!==defender.col){
+      defender.trail.push({col:defender.col,row:defender.row});
+      defender.col=hc;return;
+    }
+    // Try vertical only
+    const vr=clamp(defender.row+dRow,0,ROWS-1);
+    if(!isTileOccupied(defender.col,vr,defender.id)&&vr!==defender.row){
+      defender.trail.push({col:defender.col,row:defender.row});
+      defender.row=vr;return;
+    }
+    return; // blocked
+  }
   defender.trail.push({col:defender.col,row:defender.row});
-  defender.col=clamp(defender.col+dCol,0,COLS-1);
-  defender.row=clamp(defender.row+dRow,0,ROWS-1);
+  defender.col=nc;defender.row=nr;
 }
 
 function endPlayerTurn(){
