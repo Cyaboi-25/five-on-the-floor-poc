@@ -1,0 +1,1515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Five on the Floor — POC</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0d12;--surface:#1a1d27;--surface2:#22263a;--border:rgba(255,255,255,0.08);
+  --text:#f0ede6;--muted:#8a8799;--gold:#E8A030;--blue:#4A9EE8;
+  --green:#3dba6e;--red:#e85050;--court:#C8924A;--courtLine:rgba(255,255,255,0.45);
+}
+html,body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;
+  min-height:100vh;overflow-x:hidden;-webkit-tap-highlight-color:transparent;user-select:none}
+.screen{display:none;min-height:100vh;flex-direction:column;align-items:center;padding:16px}
+.screen.active{display:flex}
+h1{font-size:clamp(1.8rem,5vw,2.8rem);letter-spacing:0.05em;text-align:center;margin-bottom:8px}
+h2{font-size:clamp(1.1rem,3vw,1.5rem);color:var(--muted);text-align:center;margin-bottom:24px}
+.subtitle{color:var(--muted);font-size:0.9rem;text-align:center;margin-bottom:24px}
+button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-highlight-color:transparent}
+.btn{background:var(--surface2);color:var(--text);border:1px solid var(--border);
+  border-radius:10px;padding:14px 24px;font-size:1rem;width:100%;max-width:360px;
+  display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;
+  transition:background 0.2s,transform 0.1s}
+.btn:hover{background:#2a2e44}.btn:active{transform:scale(0.97)}
+.btn-primary{background:var(--gold);color:#000;font-weight:700;justify-content:center;
+  font-size:1.1rem;border:none;margin-top:16px}
+.btn-primary:hover{background:#f0b040}
+.btn-primary:disabled{opacity:0.4;cursor:default}
+.btn-secondary{background:var(--surface);justify-content:center}
+.target{color:var(--gold);font-weight:700;font-family:'Courier New',monospace}
+.note{color:var(--muted);font-size:0.75rem;font-style:italic;margin-top:4px}
+
+/* SCREEN 2 — LINEUP */
+#screen-lineup{padding:12px}
+.roster-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+.piece-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:12px 10px;text-align:center;width:64px;cursor:pointer;transition:all 0.2s}
+.piece-card.selected{border-color:var(--gold);box-shadow:0 0 10px rgba(232,160,48,0.3)}
+.piece-card .circle{width:42px;height:42px;border-radius:50%;background:var(--gold);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;
+  color:#000;margin:0 auto 6px;position:relative}
+.piece-card .size-name{font-size:0.65rem;color:var(--muted)}
+.piece-card .card-slot{height:20px;margin-top:4px;font-size:0.6rem;color:var(--gold);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.piece-card.grayed{opacity:0.3;pointer-events:none}
+
+.budget-bar{display:flex;gap:6px;justify-content:center;margin-bottom:12px;font-size:1.2rem}
+.budget-dot{color:var(--gold)}.budget-dot.spent{color:var(--muted);opacity:0.3}
+
+.card-pool{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-height:240px;
+  overflow-y:auto;padding:8px;margin-bottom:12px}
+.card-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:8px 10px;font-size:0.7rem;cursor:pointer;transition:all 0.2s;min-width:90px;
+  text-align:center;position:relative}
+.card-item .card-name{font-weight:700;margin-bottom:2px}
+.card-item .card-stars{color:var(--gold);font-size:0.65rem}
+.card-item .card-cost{font-size:0.6rem;color:var(--muted)}
+.card-item .card-desc{font-size:0.55rem;color:var(--muted);margin-top:2px}
+.card-item .card-elig{font-size:0.55rem;color:var(--blue);margin-top:2px}
+.card-item.selected{border-color:var(--gold);background:rgba(232,160,48,0.15)}
+.card-item.disabled{opacity:0.25;pointer-events:none}
+.card-item.dealt{border-color:var(--green);background:rgba(61,186,110,0.1)}
+
+/* SCREEN 3 — SCOUTING */
+#screen-scouting{padding:12px}
+.scout-cols{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:24px}
+.scout-col{flex:1;min-width:140px;max-width:200px}
+.scout-col h3{text-align:center;font-size:0.9rem;margin-bottom:8px}
+.scout-piece{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:0.75rem}
+.scout-circle{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-weight:700;font-size:0.7rem;color:#000;flex-shrink:0}
+.scout-card-name{font-size:0.6rem;color:var(--gold)}
+
+/* SCREEN 4 — GAME */
+#screen-game{padding:0;width:100%}
+.game-header{display:flex;justify-content:space-between;align-items:center;
+  padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);
+  font-size:0.8rem;width:100%}
+.ball-info{padding:6px 12px;background:var(--surface2);font-size:0.7rem;
+  width:100%;text-align:center;border-bottom:1px solid var(--border)}
+.court-wrap{width:100%;position:relative;overflow:hidden}
+.court-svg{width:100%;display:block}
+.action-bar{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;
+  background:var(--surface);border-top:1px solid var(--border);width:100%;
+  -webkit-overflow-scrolling:touch}
+.action-btn{padding:8px 14px;border-radius:8px;font-size:0.75rem;font-weight:600;
+  background:var(--surface2);color:var(--text);border:1px solid var(--border);
+  white-space:nowrap;flex-shrink:0;transition:all 0.15s}
+.action-btn.shoot{background:var(--green);color:#000;border-color:var(--green)}
+.action-btn:disabled{opacity:0.25;pointer-events:none}
+.action-btn:active:not(:disabled){transform:scale(0.95)}
+.bottom-bar{display:flex;justify-content:space-between;align-items:center;
+  padding:8px 12px;background:var(--surface);border-top:1px solid var(--border);
+  width:100%;font-size:0.75rem}
+.ap-dots{display:flex;gap:4px}
+.ap-dot{width:14px;height:14px;border-radius:50%;background:var(--gold)}
+.ap-dot.spent{background:var(--muted);opacity:0.25}
+.momentum-track{display:flex;gap:3px;align-items:center}
+.mom-pip{width:10px;height:10px;border-radius:50%;background:var(--muted);opacity:0.3}
+.mom-pip.blue{background:var(--blue);opacity:1}
+.mom-pip.neutral{background:var(--muted);opacity:0.6}
+.mom-pip.gold{background:var(--gold);opacity:1}
+.end-turn-btn{padding:6px 12px;border-radius:6px;background:var(--surface2);color:var(--text);
+  border:1px solid var(--border);font-size:0.7rem;cursor:pointer}
+
+/* DICE OVERLAY */
+.overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);
+  display:none;flex-direction:column;align-items:center;justify-content:center;z-index:100;
+  padding:24px;text-align:center}
+.overlay.active{display:flex}
+.overlay .zone-info{font-size:0.85rem;color:var(--muted);margin-bottom:8px}
+.overlay .coverage-info{font-size:0.8rem;color:var(--muted);margin-bottom:4px}
+.overlay .mod-line{font-size:0.7rem;color:var(--muted)}
+.dice-row{display:flex;gap:12px;margin:20px 0}
+.die{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:1.5rem;font-weight:700;font-family:'Courier New',monospace}
+.die.hit{background:var(--green);color:#000}.die.miss{background:var(--red);color:#fff}
+.result-text{font-size:2.2rem;font-weight:700;margin:12px 0}
+.result-pts{font-size:1rem;color:var(--muted)}
+.overlay .next-btn{margin-top:20px;padding:12px 32px;border-radius:10px;font-size:1rem;
+  font-weight:600;background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.violation-text{font-size:1.5rem;font-weight:700;color:var(--red);margin:12px 0}
+
+/* SCREEN 5 — RESULT */
+#screen-result .result-icon{font-size:3rem;margin-bottom:12px}
+#screen-result .score-line{font-size:1.8rem;font-weight:700;font-family:'Courier New',monospace;margin:8px 0}
+.result-summary{background:var(--surface);border-radius:10px;padding:12px 16px;margin:16px 0;
+  font-size:0.8rem;max-width:360px;width:100%}
+.result-summary div{padding:4px 0;display:flex;justify-content:space-between}
+
+/* Pass target select overlay */
+.pass-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);
+  display:none;z-index:50;align-items:center;justify-content:center;flex-direction:column;padding:24px}
+.pass-overlay.active{display:flex}
+.pass-option{background:var(--surface2);border:1px solid var(--border);border-radius:10px;
+  padding:12px 20px;margin:6px;font-size:0.85rem;color:var(--text);width:100%;max-width:300px;
+  display:flex;justify-content:space-between;cursor:pointer}
+.pass-option:hover{border-color:var(--gold)}
+.pass-cancel{margin-top:12px;color:var(--muted);font-size:0.8rem;cursor:pointer;background:none;border:none}
+</style>
+</head>
+<body>
+
+<!-- SCREEN 1 — CHALLENGE SELECT -->
+<div id="screen-select" class="screen active">
+  <div style="margin-top:15vh">
+    <h1>FIVE ON THE FLOOR</h1>
+    <h2>Can you score in 10 possessions?</h2>
+  </div>
+  <div id="tier-buttons"></div>
+</div>
+
+<!-- SCREEN 2 — LINEUP -->
+<div id="screen-lineup" class="screen">
+  <h2 style="margin-top:12px">YOUR LINEUP</h2>
+  <div class="subtitle" id="diff-label"></div>
+  <div class="roster-row" id="roster-row"></div>
+  <div class="budget-bar" id="budget-bar"></div>
+  <div id="card-section-label" style="text-align:center;font-size:0.8rem;color:var(--muted);margin-bottom:8px"></div>
+  <div class="card-pool" id="card-pool"></div>
+  <div id="assign-instructions" style="text-align:center;font-size:0.75rem;color:var(--muted);margin:8px 0;display:none">
+    Tap a card below your piece, then tap a piece to assign it.
+  </div>
+  <button class="btn btn-primary" id="confirm-lineup-btn" disabled onclick="confirmLineup()">CONFIRM LINEUP</button>
+</div>
+
+<!-- SCREEN 3 — SCOUTING -->
+<div id="screen-scouting" class="screen">
+  <h2 style="margin-top:12px">OPPONENT SCOUTING</h2>
+  <p class="subtitle">Study their defense before you play.</p>
+  <div class="scout-cols" id="scout-cols"></div>
+  <button class="btn btn-primary" onclick="startGame()">TIP OFF</button>
+</div>
+
+<!-- SCREEN 4 — GAME -->
+<div id="screen-game" class="screen">
+  <div class="game-header">
+    <span id="poss-label">Possession 1/10</span>
+    <span id="score-label" style="font-family:'Courier New',monospace">Score: 0 / 10</span>
+  </div>
+  <div class="ball-info" id="ball-info"></div>
+  <div class="court-wrap" id="court-wrap"></div>
+  <div class="action-bar" id="action-bar"></div>
+  <div class="bottom-bar">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="ap-dots" id="ap-dots"></div>
+      <span id="clock-label" style="font-family:'Courier New',monospace;font-size:0.8rem"></span>
+    </div>
+    <div class="momentum-track" id="momentum-track"></div>
+    <button class="end-turn-btn" id="end-turn-btn" onclick="endPlayerTurn()">End Turn</button>
+  </div>
+</div>
+
+<!-- SCREEN 5 — RESULT -->
+<div id="screen-result" class="screen">
+  <div style="margin-top:10vh;text-align:center">
+    <div class="result-icon" id="result-icon"></div>
+    <h1 id="result-title"></h1>
+    <div class="score-line" id="result-score"></div>
+    <div id="result-detail" style="color:var(--muted);font-size:0.9rem;margin-bottom:8px"></div>
+    <div class="result-summary" id="result-summary"></div>
+    <button class="btn btn-primary" onclick="tryAgain()">TRY AGAIN</button>
+    <button class="btn btn-secondary" id="next-tier-btn" style="max-width:360px;margin:8px auto" onclick="nextTier()">NEXT TIER</button>
+    <button class="btn btn-secondary" style="max-width:360px;margin:8px auto" onclick="backToMenu()">BACK TO MENU</button>
+  </div>
+</div>
+
+<!-- DICE OVERLAY -->
+<div class="overlay" id="dice-overlay">
+  <div class="zone-info" id="dice-zone"></div>
+  <div class="coverage-info" id="dice-coverage"></div>
+  <div id="dice-mods"></div>
+  <div class="dice-row" id="dice-row"></div>
+  <div class="result-text" id="dice-result"></div>
+  <div class="result-pts" id="dice-pts"></div>
+  <button class="next-btn" id="dice-next-btn">Next Possession →</button>
+</div>
+
+<!-- VIOLATION OVERLAY -->
+<div class="overlay" id="violation-overlay">
+  <div class="violation-text" id="violation-text"></div>
+  <div style="color:var(--muted);font-size:0.9rem" id="violation-detail"></div>
+  <button class="next-btn" style="margin-top:20px" id="violation-next-btn">Next Possession →</button>
+</div>
+
+<!-- PASS OVERLAY -->
+<div class="pass-overlay" id="pass-overlay">
+  <h3 style="margin-bottom:12px">Pass to...</h3>
+  <div id="pass-options"></div>
+  <button class="pass-cancel" onclick="closePassOverlay()">Cancel</button>
+</div>
+
+<script>
+// ========================================
+// STATE
+// ========================================
+const TIERS = [
+  {name:'ROOKIE',target:10,key:'rookie'},
+  {name:'PRO',target:14,key:'pro'},
+  {name:'ALL-STAR',target:18,key:'all_star'},
+  {name:'HOF',target:21,key:'hof'},
+  {name:'LEGEND',target:24,key:'legend'}
+];
+
+let state = {
+  screen:'select',difficulty:null,tierIdx:0,
+  roster:[],cards:[],selectedCards:[],
+  cpuRoster:[],cpuCards:[],
+  possession:0,score:0,clock:24,
+  actionPoints:3,turnFirstAction:true,
+  ballCarrier:null,selectedPiece:null,
+  momentum:0, // -2 to +2, negative=CPU
+  offense:[],defense:[],
+  manAssign:{}, // d_id -> o_id
+  lastPassDistance:0,
+  possessionStats:{made:0,missed:0,bestPoss:0,bestPossScore:0,totalPossScore:0},
+  cpuAnimating:false,
+  assignMode:null, // card key being assigned
+  paintTurns:{}, // piece id -> count
+};
+
+// ========================================
+// CARDS
+// ========================================
+const CARDS = {
+  rim_anchor:{name:'Rim Anchor',stars:2,label:'★★',rarity:'superstar',cost:1,
+    eligible:['medium'],description:'Wing contests in paint with +1 die.',
+    effect:{paint_contest_die:true}},
+  post_up:{name:'Post Up',stars:1,label:'★',rarity:'all_star',cost:1,
+    eligible:['medium','small'],description:'Post presence: opponents cost +1 to navigate.',
+    effect:{post_presence:true}},
+  screen_wall:{name:'Screen Wall',stars:1,label:'★',rarity:'all_star',cost:1,
+    eligible:['medium'],description:'Screens cost defense +1 action to navigate.',
+    effect:{heavy_screen:true}},
+  first_step:{name:'First Step',stars:2,label:'★★',rarity:'superstar',cost:1,
+    eligible:['medium'],description:'Wing gets burst speed (2 tiles per action).',
+    effect:{speed:2}},
+  ball_handler:{name:'Ball Handler',stars:2,label:'★★',rarity:'superstar',cost:1,
+    eligible:['medium'],description:'Wing can start as ball carrier. Passing Vision.',
+    effect:{can_start_with_ball:true,passing_vision:true}},
+  paint_beast:{name:'Paint Beast',stars:2,label:'★★',rarity:'superstar',cost:1,
+    eligible:['small'],description:'Guard gets paint bonus die.',
+    effect:{paint_bonus:true,remove_paint_vuln:true}},
+  post_threat:{name:'Post Threat',stars:1,label:'★',rarity:'all_star',cost:1,
+    eligible:['small'],description:'Guard has post presence in elbow/paint.',
+    effect:{post_presence:true}},
+  wing_shooter:{name:'Wing Shooter',stars:2,label:'★★',rarity:'superstar',cost:1,
+    eligible:['large'],description:'Big uses Medium thresholds on Wing/Corner.',
+    effect:{perimeter_upgrade:'medium'}},
+  high_low_passer:{name:'High-Low Passer',stars:2,label:'★★',rarity:'superstar',cost:1,
+    eligible:['large'],description:'Passes from paint/elbow always cost 1pt.',
+    effect:{safe_paint_pass:true}},
+  mobile_big:{name:'Mobile Big',stars:1,label:'★',rarity:'all_star',cost:1,
+    eligible:['large'],description:'Big can burst 2 tiles per action.',
+    effect:{speed:2}},
+  shooter:{name:'Shooter',stars:1,label:'★',rarity:'all_star',cost:1,
+    eligible:['small','medium','large'],description:'Removes perimeter threshold penalty.',
+    effect:{remove_perimeter_penalty:true}},
+  playmaker:{name:'Playmaker',stars:2,label:'★★',rarity:'superstar',cost:1,
+    eligible:['small','medium','large'],description:'Passes never cost extra.',
+    effect:{free_passes:true}},
+  lob_finisher:{name:'Lob Finisher',stars:2,label:'★★',rarity:'superstar',cost:1,
+    eligible:['large','medium'],description:'Pass to paint from 3+ tiles = Wide Open.',
+    effect:{lob_auto_open:true}},
+  mismatch_hunter:{name:'Mismatch Hunter',stars:2,label:'★★',rarity:'superstar',cost:1,
+    eligible:['small'],description:'Free 2-tile burst once per poss vs Large defender.',
+    effect:{free_burst_vs_large:true}},
+  enforcer:{name:'Enforcer',stars:3,label:'★★★',rarity:'hof',cost:2,
+    eligible:['large'],description:'In paint: all attacker size bonuses negated.',
+    effect:{negate_attacker_bonuses:true}},
+  perimeter_defender:{name:'Perimeter Defender',stars:3,label:'★★★',rarity:'hof',cost:2,
+    eligible:['large'],description:'Big CAN close out on guards on perimeter.',
+    effect:{remove_closeout_penalty:true}},
+  positionless:{name:'Positionless',stars:4,label:'★★★★',rarity:'franchise',cost:3,
+    eligible:['small','medium','large'],description:'No size rules. Uses Small thresholds.',
+    effect:{no_size_rules:true}},
+};
+
+// SHOT THRESHOLDS: [small, medium, large, points]
+const THRESHOLDS = {
+  paint:[4,4,4,2],dunker_l:[4,5,4,2],dunker_r:[4,5,4,2],
+  elbow_l:[5,5,6,2],elbow_r:[5,5,6,2],
+  corner_l:[3,4,5,3],corner_r:[3,4,5,3],
+  wing_l:[4,5,6,3],wing_r:[4,5,6,3],
+  tok:[6,6,7,3],half:[7,7,7,3],
+};
+
+const BASKET={col:7,row:13};
+const COLS=16,ROWS=14;
+
+// ========================================
+// UTILITY
+// ========================================
+function chebyshevDist(a,b){return Math.max(Math.abs(a.col-b.col),Math.abs(a.row-b.row))}
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
+function randInt(n){return Math.floor(Math.random()*n)}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=randInt(i+1);[a[i],a[j]]=[a[j],a[i]]}return a}
+function pick(arr){return arr[randInt(arr.length)]}
+
+function getZone(col,row){
+  if(col>=5&&col<=10&&row>=7&&row<=13) return 'paint';
+  if(col>=3&&col<=4&&row>=9&&row<=13) return 'dunker_l';
+  if(col>=11&&col<=12&&row>=9&&row<=13) return 'dunker_r';
+  if(col>=0&&col<=2&&row>=5&&row<=13) return 'corner_l';
+  if(col>=13&&col<=15&&row>=5&&row<=13) return 'corner_r';
+  if(col>=0&&col<=4&&row>=1&&row<=5) return 'wing_l';
+  if(col>=11&&col<=15&&row>=1&&row<=5) return 'wing_r';
+  if(col>=3&&col<=5&&row>=4&&row<=7) return 'elbow_l';
+  if(col>=10&&col<=12&&row>=4&&row<=7) return 'elbow_r';
+  if(col>=5&&col<=10&&row>=2&&row<=4) return 'tok';
+  return 'half';
+}
+
+function zoneName(z){
+  const names={paint:'Paint',dunker_l:'Dunker Left',dunker_r:'Dunker Right',
+    corner_l:'Corner Left',corner_r:'Corner Right',wing_l:'Wing Left',wing_r:'Wing Right',
+    elbow_l:'Elbow Left',elbow_r:'Elbow Right',tok:'Top of Key',half:'Half Court'};
+  return names[z]||z;
+}
+
+function isPaintZone(z){return z==='paint'||z==='dunker_l'||z==='dunker_r'}
+
+// ========================================
+// SCREEN 1 — CHALLENGE SELECT
+// ========================================
+function renderTierButtons(){
+  const c=document.getElementById('tier-buttons');
+  c.innerHTML='';
+  TIERS.forEach((t,i)=>{
+    const b=document.createElement('button');
+    b.className='btn';
+    b.innerHTML=`<span>${t.name}</span><span class="target">${t.target} pts</span>`;
+    if(i===4) b.innerHTML+=`<br><span class="note" style="width:100%;text-align:center">Nearly impossible. Good luck.</span>`;
+    b.onclick=()=>selectTier(i);
+    c.appendChild(b);
+  });
+}
+
+function selectTier(idx){
+  state.tierIdx=idx;
+  state.difficulty=TIERS[idx].key;
+  showScreen('lineup');
+  initLineup();
+}
+
+// ========================================
+// SCREEN 2 — LINEUP
+// ========================================
+function generateRoster(){
+  const guaranteed=['small','medium'];
+  const pool=['small','small','medium','medium','large','large','large'];
+  const remaining=[];
+  for(let i=0;i<3;i++){const idx=randInt(pool.length);remaining.push(pool.splice(idx,1)[0])}
+  const sizes=shuffle([...guaranteed,...remaining]);
+  return sizes.map((size,i)=>({
+    id:`o${i}`,size,label:size==='small'?'S':size==='medium'?'M':'L',
+    card:null,speed:size==='small'?2:1,paintTurns:0,
+    mismatchUsed:false,
+  }));
+}
+
+function initLineup(){
+  state.roster=generateRoster();
+  state.selectedCards=[];
+  state.assignMode=null;
+  const d=state.difficulty;
+  document.getElementById('diff-label').textContent=`${TIERS[state.tierIdx].name} — Target: ${TIERS[state.tierIdx].target} pts`;
+
+  let budget=3;
+  // Deal or pick cards based on difficulty
+  if(d==='rookie'||d==='pro'){
+    renderCardPool(budget);
+    document.getElementById('card-section-label').textContent='Pick cards (budget: 3 points)';
+  } else if(d==='all_star'){
+    const dealt=dealRandomCards(3,null);
+    state.selectedCards=dealt;
+    document.getElementById('card-section-label').textContent='Your dealt cards (assign to pieces)';
+    renderDealtCards();
+  } else if(d==='hof'){
+    const dealt=dealRandomCards(3,'hof');
+    state.selectedCards=dealt;
+    document.getElementById('card-section-label').textContent='Your dealt cards (one HoF+ guaranteed)';
+    renderDealtCards();
+  } else {
+    const dealt=dealRandomCards(1,null);
+    state.selectedCards=dealt;
+    document.getElementById('card-section-label').textContent='Your single dealt card';
+    renderDealtCards();
+  }
+  renderRoster();
+  updateConfirmBtn();
+}
+
+function dealRandomCards(count,guaranteeMin){
+  const allKeys=Object.keys(CARDS);
+  const result=[];
+  if(guaranteeMin){
+    const hof=allKeys.filter(k=>CARDS[k].rarity==='hof'||CARDS[k].rarity==='franchise');
+    result.push({key:pick(hof),...CARDS[pick(hof)]});
+    // Fix: pick properly
+    const hk=pick(hof);
+    result.length=0;
+    result.push({key:hk,...CARDS[hk]});
+  }
+  while(result.length<count){
+    const k=pick(allKeys);
+    if(!result.find(c=>c.key===k)){result.push({key:k,...CARDS[k]})}
+  }
+  return result;
+}
+
+let budgetRemaining=3;
+function renderCardPool(budget){
+  budgetRemaining=budget;
+  const pool=document.getElementById('card-pool');
+  pool.innerHTML='';
+  const rarityOrder=['all_star','superstar','hof','franchise'];
+  const sorted=Object.entries(CARDS).sort((a,b)=>rarityOrder.indexOf(a[1].rarity)-rarityOrder.indexOf(b[1].rarity));
+  sorted.forEach(([key,card])=>{
+    const div=document.createElement('div');
+    div.className='card-item';
+    div.dataset.key=key;
+    div.innerHTML=`<div class="card-stars">${card.label}</div><div class="card-name">${card.name}</div>
+      <div class="card-cost">${card.cost}pt</div><div class="card-desc">${card.description}</div>
+      <div class="card-elig">${card.eligible.map(s=>s[0].toUpperCase()).join('/')}</div>`;
+    div.onclick=()=>toggleCardSelection(key);
+    pool.appendChild(div);
+  });
+  updateCardPool();
+  updateBudgetBar();
+}
+
+function toggleCardSelection(key){
+  const idx=state.selectedCards.findIndex(c=>c.key===key);
+  if(idx>=0){
+    state.selectedCards.splice(idx,1);
+    budgetRemaining+=CARDS[key].cost;
+    // Unassign if was assigned
+    state.roster.forEach(p=>{if(p.card&&p.card.key===key)p.card=null});
+  } else {
+    if(budgetRemaining>=CARDS[key].cost){
+      state.selectedCards.push({key,...CARDS[key]});
+      budgetRemaining-=CARDS[key].cost;
+    }
+  }
+  updateCardPool();
+  updateBudgetBar();
+  renderRoster();
+  updateConfirmBtn();
+}
+
+function updateCardPool(){
+  document.querySelectorAll('#card-pool .card-item').forEach(el=>{
+    const k=el.dataset.key;
+    const sel=state.selectedCards.find(c=>c.key===k);
+    el.classList.toggle('selected',!!sel);
+    el.classList.toggle('disabled',!sel&&budgetRemaining<CARDS[k].cost);
+  });
+}
+
+function updateBudgetBar(){
+  const bar=document.getElementById('budget-bar');
+  bar.innerHTML='';
+  for(let i=0;i<3;i++){
+    const d=document.createElement('span');
+    d.className='budget-dot'+(i<budgetRemaining?'':' spent');
+    d.textContent=i<budgetRemaining?'●':'○';
+    bar.appendChild(d);
+  }
+}
+
+function renderDealtCards(){
+  const pool=document.getElementById('card-pool');
+  pool.innerHTML='';
+  state.selectedCards.forEach((card,i)=>{
+    const div=document.createElement('div');
+    div.className='card-item dealt';
+    div.dataset.key=card.key;
+    div.innerHTML=`<div class="card-stars">${card.label}</div><div class="card-name">${card.name}</div>
+      <div class="card-desc">${card.description}</div>
+      <div class="card-elig">${card.eligible.map(s=>s[0].toUpperCase()).join('/')}</div>`;
+    div.onclick=()=>startAssign(card.key);
+    pool.appendChild(div);
+  });
+  document.getElementById('budget-bar').innerHTML='';
+  document.getElementById('assign-instructions').style.display='block';
+}
+
+function startAssign(cardKey){
+  state.assignMode=cardKey;
+  // Unassign from any piece that has this card
+  state.roster.forEach(p=>{if(p.card&&p.card.key===cardKey)p.card=null});
+  renderRoster();
+  // Highlight dealt card
+  document.querySelectorAll('#card-pool .card-item').forEach(el=>{
+    el.classList.toggle('selected',el.dataset.key===cardKey);
+  });
+}
+
+function renderRoster(){
+  const row=document.getElementById('roster-row');
+  row.innerHTML='';
+  state.roster.forEach((p,i)=>{
+    const div=document.createElement('div');
+    div.className='piece-card';
+    const sizeLabel=p.size==='small'?'Guard':p.size==='medium'?'Wing':'Center';
+    const cardText=p.card?p.card.name:'—';
+    div.innerHTML=`<div class="circle">${p.label}${i+1}</div>
+      <div class="size-name">${sizeLabel}</div>
+      <div class="card-slot">${cardText}</div>`;
+    if(state.assignMode){
+      const card=CARDS[state.assignMode];
+      if(!card.eligible.includes(p.size)){
+        div.classList.add('grayed');
+      } else {
+        div.onclick=()=>assignCard(i);
+      }
+    } else if(state.difficulty==='rookie'||state.difficulty==='pro'){
+      // In pick mode, clicking piece does nothing special
+    }
+    row.appendChild(div);
+  });
+}
+
+function assignCard(pieceIdx){
+  if(!state.assignMode)return;
+  const card={key:state.assignMode,...CARDS[state.assignMode]};
+  state.roster[pieceIdx].card=card;
+  // Apply speed from card
+  if(card.effect.speed) state.roster[pieceIdx].speed=card.effect.speed;
+  state.assignMode=null;
+  renderRoster();
+  document.querySelectorAll('#card-pool .card-item').forEach(el=>el.classList.remove('selected'));
+  // For pick mode, also enable assign
+  if(state.difficulty==='rookie'||state.difficulty==='pro'){
+    document.getElementById('assign-instructions').style.display='block';
+    // Re-render the card pool items as clickable for assign
+  }
+  updateConfirmBtn();
+}
+
+function updateConfirmBtn(){
+  const btn=document.getElementById('confirm-lineup-btn');
+  // Can confirm if we have at least some cards selected (or dealt)
+  const hasCards=state.selectedCards.length>0;
+  btn.disabled=false; // Always allow confirm, player might want to go cardless
+}
+
+function confirmLineup(){
+  // If pick mode, prompt assignment of unassigned cards
+  if(state.difficulty==='rookie'||state.difficulty==='pro'){
+    const unassigned=state.selectedCards.filter(c=>!state.roster.find(p=>p.card&&p.card.key===c.key));
+    if(unassigned.length>0&&!state.assignMode){
+      state.assignMode=unassigned[0].key;
+      document.getElementById('assign-instructions').style.display='block';
+      document.getElementById('assign-instructions').textContent=`Tap a piece to assign "${unassigned[0].name}" (or confirm to skip)`;
+      renderRoster();
+      document.querySelectorAll('#card-pool .card-item').forEach(el=>{
+        el.classList.toggle('selected',el.dataset.key===unassigned[0].key);
+      });
+      // Second click on confirm = skip assignment
+      if(state._confirmCount){
+        state.assignMode=null;
+        showScreen('scouting');
+        initScouting();
+        state._confirmCount=0;
+        return;
+      }
+      state._confirmCount=1;
+      return;
+    }
+  }
+  state.assignMode=null;
+  showScreen('scouting');
+  initScouting();
+}
+
+// ========================================
+// SCREEN 3 — SCOUTING
+// ========================================
+function generateCPURoster(difficulty){
+  let sizes;
+  switch(difficulty){
+    case 'rookie':sizes=['small','small','medium','medium','large'];break;
+    case 'pro':sizes=['small','medium','medium','large','large'];break;
+    case 'all_star':sizes=['small','medium','medium','large','large'];break;
+    case 'hof':sizes=['medium','medium','large','large','large'];break;
+    case 'legend':sizes=['medium','large','large','large','large'];break;
+    default:sizes=['small','medium','medium','large','large'];
+  }
+  shuffle(sizes);
+  return sizes.map((size,i)=>({
+    id:`d${i}`,size,label:size==='small'?'S':size==='medium'?'M':'L',
+    card:null,speed:1,paintTurns:0,
+  }));
+}
+
+function getCPUCards(difficulty){
+  const defCards=['enforcer','perimeter_defender','rim_anchor'];
+  const allStar=['shooter','screen_wall','post_up','mobile_big','post_threat'];
+  const sup=['rim_anchor','first_step','ball_handler','paint_beast','wing_shooter','playmaker'];
+  const hof=['enforcer','perimeter_defender'];
+  function randomFromPool(pool){return pick(pool)}
+  switch(difficulty){
+    case 'rookie':return [{key:pick(allStar),...CARDS[pick(allStar)]}];
+    case 'pro':return [{key:pick(allStar),...CARDS[pick(allStar)]},{key:pick(sup),...CARDS[pick(sup)]}];
+    case 'all_star':return [{key:pick(sup),...CARDS[pick(sup)]},{key:pick(hof),...CARDS[pick(hof)]}];
+    case 'hof':return [{key:pick(sup),...CARDS[pick(sup)]},{key:'enforcer',...CARDS.enforcer},{key:pick(hof),...CARDS[pick(hof)]}];
+    case 'legend':return [{key:pick(sup),...CARDS[pick(sup)]},{key:'enforcer',...CARDS.enforcer},{key:'positionless',...CARDS.positionless}];
+    default:return [];
+  }
+}
+
+function initScouting(){
+  state.cpuRoster=generateCPURoster(state.difficulty);
+  state.cpuCards=getCPUCards(state.difficulty);
+  // Assign CPU cards to eligible pieces
+  const available=[...state.cpuRoster];
+  state.cpuCards.forEach(card=>{
+    const eligible=available.filter(p=>card.eligible.includes(p.size));
+    if(eligible.length){
+      const p=eligible[0];
+      p.card=card;
+      available.splice(available.indexOf(p),1);
+    }
+  });
+  renderScouting();
+}
+
+function renderScouting(){
+  const cols=document.getElementById('scout-cols');
+  cols.innerHTML='';
+  // Player column
+  const pCol=document.createElement('div');
+  pCol.className='scout-col';
+  pCol.innerHTML='<h3 style="color:var(--gold)">YOUR LINEUP</h3>';
+  state.roster.forEach((p,i)=>{
+    const div=document.createElement('div');
+    div.className='scout-piece';
+    div.innerHTML=`<div class="scout-circle" style="background:var(--gold)">${p.label}${i+1}</div>
+      <div><div>${p.size==='small'?'Guard':p.size==='medium'?'Wing':'Center'}</div>
+      ${p.card?`<div class="scout-card-name">${p.card.name}</div>`:''}</div>`;
+    pCol.appendChild(div);
+  });
+  cols.appendChild(pCol);
+  // CPU column
+  const cCol=document.createElement('div');
+  cCol.className='scout-col';
+  cCol.innerHTML='<h3 style="color:var(--blue)">THEIR LINEUP</h3>';
+  state.cpuRoster.forEach((p,i)=>{
+    const div=document.createElement('div');
+    div.className='scout-piece';
+    div.innerHTML=`<div class="scout-circle" style="background:var(--blue)">${p.label}${i+1}</div>
+      <div><div>${p.size==='small'?'Guard':p.size==='medium'?'Wing':'Center'}</div>
+      ${p.card?`<div class="scout-card-name" style="color:var(--blue)">${p.card.name}</div>`:''}</div>`;
+    cCol.appendChild(div);
+  });
+  cols.appendChild(cCol);
+}
+
+// ========================================
+// SCREEN 4 — GAME
+// ========================================
+function startGame(){
+  state.score=0;state.possession=0;state.momentum=0;
+  state.possessionStats={made:0,missed:0,bestPoss:0,bestPossScore:0,totalPossScore:0};
+  showScreen('game');
+  startPossession();
+}
+
+function startPossession(){
+  state.possession++;
+  state.clock=24;state.actionPoints=3;state.turnFirstAction=true;
+  state.selectedPiece=null;state.lastPassDistance=0;
+  state.cpuAnimating=false;
+  // OFFENSE POSITIONS
+  state.offense=state.roster.map((p,i)=>{
+    const starts=[{col:8,row:0},{col:2,row:3},{col:8,row:3},{col:13,row:3},{col:10,row:6}];
+    return {...p,col:starts[i].col,row:starts[i].row,idx:i,paintTurns:0,mismatchUsed:p.mismatchUsed||false,trail:[]};
+  });
+  state.ballCarrier=state.offense[0];
+  // DEFENSE POSITIONS
+  state.defense=state.cpuRoster.map((p,i)=>{
+    const starts=[{col:8,row:2},{col:2,row:3},{col:13,row:3},{col:5,row:6},{col:10,row:7}];
+    return {...p,col:starts[i].col,row:starts[i].row,idx:i,paintTurns:0,trail:[]};
+  });
+  // Man assignments: D0→O0, D1→O1, D2→O3, D3→O4, D4=free
+  state.manAssign={'d0':'o0','d1':'o1','d2':'o3','d3':'o4'};
+  // Reset paint turns
+  state.offense.forEach(p=>p.paintTurns=0);
+  renderCourt();
+  updateGameUI();
+}
+
+let courtW,courtH,tileW,tileH;
+
+function renderCourt(){
+  const wrap=document.getElementById('court-wrap');
+  const w=Math.min(window.innerWidth,600);
+  const h=Math.round(w*(14/16));
+  courtW=w;courtH=h;tileW=w/COLS;tileH=h/ROWS;
+
+  let svg=`<svg class="court-svg" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" style="touch-action:none">`;
+  // Court floor
+  svg+=`<rect width="${w}" height="${h}" fill="${'#C8924A'}"/>`;
+
+  // Zone tints
+  const zones=[
+    {c:[5,10],r:[7,13],fill:'rgba(220,70,50,0.14)'},   // paint
+    {c:[3,4],r:[9,13],fill:'rgba(220,70,50,0.10)'},     // dunker L
+    {c:[11,12],r:[9,13],fill:'rgba(220,70,50,0.10)'},   // dunker R
+    {c:[0,2],r:[5,13],fill:'rgba(61,186,110,0.10)'},    // corner L
+    {c:[13,15],r:[5,13],fill:'rgba(61,186,110,0.10)'},  // corner R
+    {c:[0,4],r:[1,5],fill:'rgba(74,158,232,0.08)'},     // wing L
+    {c:[11,15],r:[1,5],fill:'rgba(74,158,232,0.08)'},   // wing R
+    {c:[3,5],r:[4,7],fill:'rgba(232,160,48,0.08)'},     // elbow L
+    {c:[10,12],r:[4,7],fill:'rgba(232,160,48,0.08)'},   // elbow R
+    {c:[5,10],r:[2,4],fill:'rgba(140,90,200,0.08)'},    // ToK
+    {c:[0,15],r:[0,1],fill:'rgba(100,100,120,0.06)'},   // half
+  ];
+  zones.forEach(z=>{
+    const x=z.c[0]*tileW, y=z.r[0]*tileH;
+    const zw=(z.c[1]-z.c[0]+1)*tileW, zh=(z.r[1]-z.r[0]+1)*tileH;
+    svg+=`<rect x="${x}" y="${y}" width="${zw}" height="${zh}" fill="${z.fill}"/>`;
+  });
+
+  // Court lines
+  const lc='rgba(255,255,255,0.45)';
+  const lw=1.5;
+  // Paint rectangle
+  const px=5*tileW,py=7*tileH,pw=6*tileW,ph=7*tileH;
+  svg+=`<rect x="${px}" y="${py}" width="${pw}" height="${ph}" fill="none" stroke="${lc}" stroke-width="${lw}"/>`;
+  // Free throw line
+  svg+=`<line x1="${px}" y1="${py}" x2="${px+pw}" y2="${py}" stroke="${lc}" stroke-width="${lw}"/>`;
+  // Free throw circle
+  const ftCx=8*tileW, ftCy=7*tileH;
+  svg+=`<ellipse cx="${ftCx}" cy="${ftCy}" rx="${3*tileW}" ry="${2*tileH}" fill="none" stroke="${lc}" stroke-width="${lw}"/>`;
+  // Three point arc
+  const arcLeft=2.5*tileW, arcRight=13.5*tileW;
+  const arcBottom=h;
+  const arcY=5*tileH;
+  svg+=`<line x1="${arcLeft}" y1="${arcBottom}" x2="${arcLeft}" y2="${arcY}" stroke="${lc}" stroke-width="${lw}"/>`;
+  svg+=`<line x1="${arcRight}" y1="${arcBottom}" x2="${arcRight}" y2="${arcY}" stroke="${lc}" stroke-width="${lw}"/>`;
+  // Arc from left to right
+  const arcMidX=8*tileW;
+  svg+=`<path d="M ${arcLeft} ${arcY} Q ${arcMidX} ${1*tileH} ${arcRight} ${arcY}" fill="none" stroke="${lc}" stroke-width="${lw}"/>`;
+  // Rim
+  const rimX=7.5*tileW, rimY=12.5*tileH;
+  svg+=`<circle cx="${rimX}" cy="${rimY}" r="${tileW*0.5}" fill="none" stroke="${lc}" stroke-width="2"/>`;
+  // Backboard
+  svg+=`<line x1="${6.5*tileW}" y1="${13*tileH}" x2="${9.5*tileW}" y2="${13*tileH}" stroke="${lc}" stroke-width="2.5"/>`;
+  // Restricted area arc
+  svg+=`<path d="M ${6*tileW} ${13*tileH} Q ${7.5*tileW} ${11*tileH} ${10*tileW} ${13*tileH}" fill="none" stroke="${lc}" stroke-width="${lw}"/>`;
+
+  // Grid lines
+  for(let c=0;c<=COLS;c++) svg+=`<line x1="${c*tileW}" y1="0" x2="${c*tileW}" y2="${h}" stroke="rgba(255,255,255,0.07)" stroke-width="0.5"/>`;
+  for(let r=0;r<=ROWS;r++) svg+=`<line x1="0" y1="${r*tileH}" x2="${w}" y2="${r*tileH}" stroke="rgba(255,255,255,0.07)" stroke-width="0.5"/>`;
+
+  // Spot labels
+  const labels=[{text:'nail',col:7.5,row:6.5},{text:'dunker',col:3,row:11},{text:'dunker',col:12,row:11},
+    {text:'slot',col:3,row:3},{text:'slot',col:12,row:3}];
+  labels.forEach(l=>{
+    svg+=`<text x="${l.col*tileW}" y="${l.row*tileH+4}" text-anchor="middle" font-size="7" fill="rgba(255,255,255,0.2)" font-family="system-ui">${l.text}</text>`;
+  });
+
+  // Highlight tiles
+  svg+=`<g id="highlights"></g>`;
+
+  // Movement trails
+  svg+=`<g id="trails"></g>`;
+
+  // Defense pieces
+  state.defense.forEach((d,i)=>{
+    const cx=(d.col+0.5)*tileW, cy=(d.row+0.5)*tileH;
+    const r=d.size==='small'?16:d.size==='medium'?19:22;
+    const sc=Math.min(tileW,tileH)/42;
+    const sr=r*sc;
+    svg+=`<g class="def-piece" data-id="${d.id}" style="transition:transform 0.4s ease">`;
+    svg+=`<circle cx="${cx}" cy="${cy}" r="${sr}" fill="var(--blue)" opacity="0.7"/>`;
+    svg+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="${10*sc}" fill="#000" font-weight="700" font-family="system-ui">${d.label}${i+1}</text>`;
+    // Card dot
+    if(d.card){
+      const dotColor=d.card.rarity==='all_star'?'rgba(255,255,255,0.7)':d.card.rarity==='superstar'?'#E8A030':d.card.rarity==='hof'?'#a060e0':'#FFD700';
+      svg+=`<circle cx="${cx+sr*0.6}" cy="${cy-sr*0.6}" r="3" fill="${dotColor}"/>`;
+    }
+    svg+=`</g>`;
+  });
+
+  // Offense pieces
+  state.offense.forEach((o,i)=>{
+    const cx=(o.col+0.5)*tileW, cy=(o.row+0.5)*tileH;
+    const r=o.size==='small'?16:o.size==='medium'?19:22;
+    const sc=Math.min(tileW,tileH)/42;
+    const sr=r*sc;
+    const isBall=state.ballCarrier&&state.ballCarrier.id===o.id;
+    const isSel=state.selectedPiece&&state.selectedPiece.id===o.id;
+    svg+=`<g class="off-piece" data-id="${o.id}" style="cursor:pointer;transition:transform 0.4s ease">`;
+    // Ball carrier glow
+    if(isBall) svg+=`<circle cx="${cx}" cy="${cy}" r="${sr+6}" fill="none" stroke="var(--gold)" stroke-width="2" opacity="0.5"><animate attributeName="opacity" values="0.3;0.7;0.3" dur="1.5s" repeatCount="indefinite"/></circle>`;
+    // Selected ring
+    if(isSel) svg+=`<circle cx="${cx}" cy="${cy}" r="${sr+3}" fill="none" stroke="#fff" stroke-width="2"/>`;
+    svg+=`<circle cx="${cx}" cy="${cy}" r="${sr}" fill="var(--gold)"/>`;
+    svg+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="${10*sc}" fill="#000" font-weight="700" font-family="system-ui">${o.label}${i+1}</text>`;
+    // Ball icon
+    if(isBall) svg+=`<text x="${cx}" y="${cy-sr-4}" text-anchor="middle" font-size="12">🏀</text>`;
+    // Card dot
+    if(o.card){
+      const dotColor=o.card.rarity==='all_star'?'rgba(255,255,255,0.7)':o.card.rarity==='superstar'?'#E8A030':o.card.rarity==='hof'?'#a060e0':'#FFD700';
+      svg+=`<circle cx="${cx+sr*0.6}" cy="${cy-sr*0.6}" r="3" fill="${dotColor}"/>`;
+    }
+    // Paint turns indicator
+    if(o.paintTurns>=2){
+      const ptColor=o.paintTurns>=3?'var(--red)':'var(--gold)';
+      svg+=`<text x="${cx-sr*0.6}" y="${cy-sr*0.6}" text-anchor="middle" font-size="9" fill="${ptColor}" font-weight="700">${o.paintTurns}</text>`;
+    }
+    svg+=`</g>`;
+  });
+
+  svg+=`</svg>`;
+  wrap.innerHTML=svg;
+
+  // Add click handler
+  const svgEl=wrap.querySelector('svg');
+  svgEl.addEventListener('click',handleCourtClick);
+  svgEl.addEventListener('touchstart',handleCourtTouch,{passive:false});
+}
+
+function handleCourtTouch(e){
+  e.preventDefault();
+  const touch=e.touches[0];
+  const svg=e.currentTarget;
+  const rect=svg.getBoundingClientRect();
+  const x=touch.clientX-rect.left;
+  const y=touch.clientY-rect.top;
+  const scaleX=courtW/rect.width;
+  const scaleY=courtH/rect.height;
+  processCourtClick(x*scaleX,y*scaleY);
+}
+
+function handleCourtClick(e){
+  const svg=e.currentTarget;
+  const rect=svg.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  const y=e.clientY-rect.top;
+  const scaleX=courtW/rect.width;
+  const scaleY=courtH/rect.height;
+  processCourtClick(x*scaleX,y*scaleY);
+}
+
+function processCourtClick(px,py){
+  if(state.cpuAnimating)return;
+  const col=Math.floor(px/tileW);
+  const row=Math.floor(py/tileH);
+  if(col<0||col>=COLS||row<0||row>=ROWS)return;
+
+  // Check if clicking on an offense piece
+  const clickedPiece=state.offense.find(p=>p.col===col&&p.row===row);
+
+  if(state.selectedPiece){
+    if(clickedPiece&&clickedPiece.id===state.selectedPiece.id){
+      state.selectedPiece=null;
+      renderCourt();updateGameUI();
+      return;
+    }
+    // Check if it's a valid destination
+    const valid=getValidMoves(state.selectedPiece);
+    const dest=valid.find(v=>v.col===col&&v.row===row);
+    if(dest){
+      movePiece(state.selectedPiece,col,row);
+      return;
+    }
+    // If clicked another piece, select it
+    if(clickedPiece){
+      state.selectedPiece=clickedPiece;
+      renderCourt();updateGameUI();
+      showHighlights();
+      return;
+    }
+    state.selectedPiece=null;
+    renderCourt();updateGameUI();
+  } else {
+    if(clickedPiece){
+      state.selectedPiece=clickedPiece;
+      renderCourt();updateGameUI();
+      showHighlights();
+    }
+  }
+}
+
+function getValidMoves(piece){
+  const moves=[];
+  const spd=piece.speed||1;
+  for(let dc=-spd;dc<=spd;dc++){
+    for(let dr=-spd;dr<=spd;dr++){
+      if(dc===0&&dr===0)continue;
+      const nc=piece.col+dc,nr=piece.row+dr;
+      if(nc<0||nc>=COLS||nr<0||nr>=ROWS)continue;
+      // Can't move onto another offense piece
+      if(state.offense.find(p=>p.id!==piece.id&&p.col===nc&&p.row===nr))continue;
+      moves.push({col:nc,row:nr,dist:Math.max(Math.abs(dc),Math.abs(dr))});
+    }
+  }
+  return moves;
+}
+
+function showHighlights(){
+  if(!state.selectedPiece)return;
+  const valid=getValidMoves(state.selectedPiece);
+  const svg=document.querySelector('.court-svg');
+  const hGroup=svg.querySelector('#highlights');
+  hGroup.innerHTML='';
+  valid.forEach(v=>{
+    const x=v.col*tileW, y=v.row*tileH;
+    const opacity=v.dist===1?0.2:0.35;
+    hGroup.innerHTML+=`<rect x="${x}" y="${y}" width="${tileW}" height="${tileH}" fill="rgba(232,160,48,${opacity})" rx="2" style="cursor:pointer"/>`;
+  });
+}
+
+function movePiece(piece,col,row){
+  if(state.actionPoints<=0)return;
+  piece.trail.push({col:piece.col,row:piece.row});
+  piece.col=col;piece.row=row;
+  state.actionPoints--;
+  state.clock--;
+  state.turnFirstAction=false;
+  state.selectedPiece=null;
+
+  // Check three-second rule
+  checkPaintTurns();
+
+  renderCourt();updateGameUI();
+
+  // CPU responds
+  cpuRespond(piece);
+}
+
+function checkPaintTurns(){
+  state.offense.forEach(p=>{
+    const z=getZone(p.col,p.row);
+    if(isPaintZone(z)){
+      p.paintTurns++;
+    } else {
+      p.paintTurns=0;
+    }
+  });
+}
+
+// ========================================
+// ACTION BAR
+// ========================================
+function updateGameUI(){
+  // Header
+  document.getElementById('poss-label').textContent=`Possession ${state.possession}/10`;
+  document.getElementById('score-label').textContent=`Score: ${state.score} / ${TIERS[state.tierIdx].target}`;
+
+  // Ball info
+  const bc=state.ballCarrier;
+  if(bc){
+    const z=getZone(bc.col,bc.row);
+    const pts=THRESHOLDS[z]?THRESHOLDS[z][3]:0;
+    document.getElementById('ball-info').textContent=
+      `🏀 ${bc.label}${bc.idx+1} has ball · ${zoneName(z)} · ${pts}pts · ${getShotRating(bc)}`;
+  }
+
+  // Action points
+  const apd=document.getElementById('ap-dots');
+  apd.innerHTML='';
+  for(let i=0;i<3;i++){
+    const d=document.createElement('div');
+    d.className='ap-dot'+(i<state.actionPoints?'':' spent');
+    apd.appendChild(d);
+  }
+
+  // Clock
+  const cl=document.getElementById('clock-label');
+  cl.textContent=`⏱ ${state.clock}`;
+  cl.style.color=state.clock>=13?'var(--green)':state.clock>=7?'var(--gold)':'var(--red)';
+
+  // Momentum
+  const mt=document.getElementById('momentum-track');
+  mt.innerHTML='';
+  for(let i=-2;i<=2;i++){
+    const pip=document.createElement('div');
+    pip.className='mom-pip';
+    if(i<0&&state.momentum<=i)pip.classList.add('blue');
+    else if(i===0)pip.classList.add('neutral');
+    else if(i>0&&state.momentum>=i)pip.classList.add('gold');
+    mt.appendChild(pip);
+  }
+
+  // Action bar
+  renderActionBar();
+
+  // Clock check
+  if(state.clock<=0){
+    setTimeout(()=>showViolation('SHOT CLOCK VIOLATION','No points scored. Possession used.'),300);
+  }
+
+  // Three-second violations
+  state.offense.forEach(p=>{
+    if(p.paintTurns>=3){
+      state.clock=Math.max(0,state.clock-3);
+      p.paintTurns=0;
+    }
+  });
+}
+
+function getShotRating(piece){
+  const z=getZone(piece.col,piece.row);
+  if(!THRESHOLDS[z])return '?';
+  const nearest=getNearestDefender(piece);
+  const dist=nearest?chebyshevDist(piece,nearest):99;
+  if(dist<=1)return 'Contested';
+  if(dist<=3)return 'Open';
+  return 'Wide Open';
+}
+
+function getNearestDefender(piece){
+  let minD=99,nearest=null;
+  state.defense.forEach(d=>{
+    const dd=chebyshevDist(piece,d);
+    if(dd<minD){minD=dd;nearest=d}
+  });
+  return nearest;
+}
+
+function renderActionBar(){
+  const bar=document.getElementById('action-bar');
+  bar.innerHTML='';
+  const sel=state.selectedPiece;
+  if(!sel){
+    bar.innerHTML='<div style="color:var(--muted);font-size:0.75rem;padding:8px">Select a piece</div>';
+    return;
+  }
+  const isBall=state.ballCarrier&&state.ballCarrier.id===sel.id;
+
+  if(isBall){
+    // Shoot
+    const shootBtn=document.createElement('button');
+    shootBtn.className='action-btn shoot';
+    shootBtn.textContent='★ SHOOT';
+    shootBtn.disabled=!state.turnFirstAction||state.actionPoints<=0;
+    shootBtn.onclick=()=>takeShot();
+    bar.appendChild(shootBtn);
+
+    // Drive (move with ball — already handled by tap-to-move)
+    const driveBtn=document.createElement('button');
+    driveBtn.className='action-btn';
+    driveBtn.textContent='Drive — move';
+    driveBtn.disabled=state.actionPoints<=0;
+    driveBtn.onclick=()=>{/* tap to move handles this */};
+    driveBtn.style.opacity='0.5';
+    driveBtn.title='Tap a tile to drive';
+    bar.appendChild(driveBtn);
+
+    // Pass
+    const passBtn=document.createElement('button');
+    passBtn.className='action-btn';
+    passBtn.textContent='Pass';
+    passBtn.disabled=state.actionPoints<=0;
+    passBtn.onclick=()=>showPassOptions();
+    bar.appendChild(passBtn);
+  } else {
+    // Off-ball: Cut (tap-to-move), Screen, Space
+    const cutBtn=document.createElement('button');
+    cutBtn.className='action-btn';
+    cutBtn.textContent='Cut — move';
+    cutBtn.disabled=state.actionPoints<=0;
+    cutBtn.style.opacity='0.5';
+    cutBtn.title='Tap a tile to cut';
+    bar.appendChild(cutBtn);
+
+    const screenBtn=document.createElement('button');
+    screenBtn.className='action-btn';
+    screenBtn.textContent='Screen — 2pt';
+    screenBtn.disabled=state.actionPoints<2;
+    screenBtn.onclick=()=>setScreen(sel);
+    bar.appendChild(screenBtn);
+  }
+}
+
+// ========================================
+// PASSING
+// ========================================
+function passCost(passer,receiver){
+  if(passer.card&&passer.card.effect&&passer.card.effect.free_passes)return 1;
+  if(passer.card&&passer.card.effect&&passer.card.effect.passing_vision)return 1;
+  if(passer.card&&passer.card.effect&&passer.card.effect.safe_paint_pass){
+    const z=getZone(passer.col,passer.row);
+    if(isPaintZone(z)||z==='elbow_l'||z==='elbow_r')return 1;
+  }
+  const mid={col:Math.round((passer.col+receiver.col)/2),row:Math.round((passer.row+receiver.row)/2)};
+  const inLane=state.defense.some(d=>
+    chebyshevDist(d,passer)<=2||chebyshevDist(d,receiver)<=2||chebyshevDist(d,mid)<=2
+  );
+  // LEGEND: CPU always in lane
+  if(state.difficulty==='legend')return 2;
+  return inLane?2:1;
+}
+
+function showPassOptions(){
+  const overlay=document.getElementById('pass-overlay');
+  const opts=document.getElementById('pass-options');
+  opts.innerHTML='';
+  const passer=state.ballCarrier;
+  state.offense.filter(p=>p.id!==passer.id).forEach(p=>{
+    const cost=passCost(passer,p);
+    if(cost>state.actionPoints)return;
+    const div=document.createElement('button');
+    div.className='pass-option';
+    const z=getZone(p.col,p.row);
+    div.innerHTML=`<span>${p.label}${p.idx+1} — ${zoneName(z)}</span><span style="color:var(--gold)">${cost}pt${cost>1?' (contested)':''}</span>`;
+    div.onclick=()=>executePass(p,cost);
+    opts.appendChild(div);
+  });
+  overlay.classList.add('active');
+}
+
+function closePassOverlay(){document.getElementById('pass-overlay').classList.remove('active')}
+
+function executePass(receiver,cost){
+  closePassOverlay();
+  state.lastPassDistance=chebyshevDist(state.ballCarrier,receiver);
+  state.ballCarrier=receiver;
+  state.actionPoints-=cost;
+  state.clock-=cost;
+  state.turnFirstAction=false;
+  state.selectedPiece=receiver;
+  renderCourt();updateGameUI();
+  cpuRespond(receiver);
+}
+
+// ========================================
+// SCREEN ACTION
+// ========================================
+function setScreen(screener){
+  if(state.actionPoints<2)return;
+  state.actionPoints-=2;
+  state.clock-=2;
+  state.turnFirstAction=false;
+  // CPU RECOVER behavior (All-Star+)
+  if(['all_star','hof','legend'].includes(state.difficulty)){
+    cpuSwitchOnScreen(screener);
+  }
+  state.selectedPiece=null;
+  renderCourt();updateGameUI();
+  cpuRespond(screener);
+}
+
+function cpuSwitchOnScreen(screener){
+  // Find screener's defender and ball carrier's defender, swap assignments
+  const screenerId=screener.id;
+  const ballId=state.ballCarrier.id;
+  let sDefKey=null,bDefKey=null;
+  Object.entries(state.manAssign).forEach(([dk,ok])=>{
+    if(ok===screenerId)sDefKey=dk;
+    if(ok===ballId)bDefKey=dk;
+  });
+  if(sDefKey&&bDefKey){
+    state.manAssign[sDefKey]=ballId;
+    state.manAssign[bDefKey]=screenerId;
+  }
+}
+
+// ========================================
+// SHOOTING
+// ========================================
+function takeShot(){
+  if(!state.turnFirstAction||!state.ballCarrier)return;
+  const shooter=state.ballCarrier;
+  const zone=getZone(shooter.col,shooter.row);
+  if(!THRESHOLDS[zone])return;
+
+  const sizeIdx=shooter.size==='small'?0:shooter.size==='medium'?1:2;
+  let threshold=THRESHOLDS[zone][sizeIdx];
+  const pts=THRESHOLDS[zone][3];
+
+  // SHOT CALC: coverage dice
+  const nearest=getNearestDefender(shooter);
+  const dist=nearest?chebyshevDist(shooter,nearest):99;
+  let dice;
+  let coverageLabel;
+  if(dist<=1){dice=1;coverageLabel='Contested'}
+  else if(dist<=3){dice=2;coverageLabel='Open'}
+  else{dice=3;coverageLabel='Wide Open'}
+
+  const mods=[];
+
+  // SHOT CALC: positioning modifier
+  if(nearest){
+    const sDist=chebyshevDist(shooter,BASKET);
+    const dDist=chebyshevDist(nearest,BASKET);
+    if(dDist>sDist+1){dice++;mods.push('+1 die (defender behind)');}
+    else if(dDist<sDist-1){
+      dice=Math.max(1,dice-1);mods.push('-1 die (defender between)');
+      if(dist<=1){threshold++;mods.push('+1 threshold (contested from front)');}
+    }
+  }
+
+  // SHOT CALC: size matchup
+  if(nearest){
+    // Small defending Large: threshold -1
+    if(nearest.size==='small'&&shooter.size==='large'){
+      // Check if enforcer negates
+      const enforcerActive=nearest.card&&nearest.card.effect&&nearest.card.effect.negate_attacker_bonuses&&isPaintZone(zone);
+      if(!enforcerActive){threshold=Math.max(2,threshold-1);mods.push('-1 threshold (shooting over small)');}
+    }
+    // Large defending Small on perimeter: min 2 dice
+    if(nearest.size==='large'&&shooter.size==='small'){
+      const perimZones=['wing_l','wing_r','corner_l','corner_r','tok'];
+      if(perimZones.includes(zone)){
+        const hasCloseout=nearest.card&&nearest.card.effect&&nearest.card.effect.remove_closeout_penalty;
+        if(!hasCloseout){
+          dice=Math.max(2,dice);mods.push('Min 2 dice (big can\'t close out)');
+        }
+      }
+    }
+  }
+
+  // SHOT CALC: Large in paint bonus
+  if(shooter.size==='large'&&isPaintZone(zone)){
+    const enforcerNearby=state.defense.some(d=>d.card&&d.card.effect&&d.card.effect.negate_attacker_bonuses&&isPaintZone(getZone(d.col,d.row))&&chebyshevDist(d,shooter)<=2);
+    if(!enforcerNearby){dice++;mods.push('+1 die (big in paint)');}
+  }
+
+  // SHOT CALC: clock pressure
+  if(state.clock<=6){dice=Math.max(1,dice-1);mods.push('-1 die (clock pressure)');}
+
+  // SHOT CALC: momentum
+  if(state.momentum>=2){dice++;mods.push('+1 die (momentum)');}
+
+  // SHOT CALC: card effects
+  const cardResult=applyCardEffects(shooter,dice,threshold,zone,nearest);
+  dice=cardResult.dice;threshold=cardResult.threshold;
+  if(cardResult.mods)mods.push(...cardResult.mods);
+
+  // Cap dice
+  dice=Math.min(5,Math.max(1,dice));
+
+  // Roll
+  const rolls=[];
+  for(let i=0;i<dice;i++)rolls.push(Math.floor(Math.random()*6)+1);
+  const made=rolls.some(r=>r>=threshold);
+
+  // Show overlay
+  showDiceOverlay(zone,pts,threshold,coverageLabel,dice,mods,rolls,made);
+
+  if(made){
+    state.score+=pts;
+    state.possessionStats.made++;
+    state.possessionStats.totalPossScore+=pts;
+    if(pts>state.possessionStats.bestPossScore){
+      state.possessionStats.bestPossScore=pts;
+      state.possessionStats.bestPoss=state.possession;
+    }
+    // Momentum
+    state.momentum=clamp(state.momentum+(pts===3?2:1),-2,2);
+  } else {
+    state.possessionStats.missed++;
+    // Wide open miss gives CPU momentum
+    if(coverageLabel==='Wide Open')state.momentum=clamp(state.momentum-1,-2,2);
+  }
+}
+
+function applyCardEffects(shooter,dice,threshold,zone,nearest){
+  const mods=[];
+  if(!shooter.card)return {dice,threshold,mods};
+  const eff=shooter.card.effect;
+
+  // Wing Shooter
+  if(eff.perimeter_upgrade==='medium'){
+    const pz=['wing_l','wing_r','corner_l','corner_r','tok'];
+    if(pz.includes(zone)){
+      const med=THRESHOLDS[zone][1];
+      if(med<threshold){threshold=med;mods.push('Wing Shooter: medium threshold');}
+    }
+  }
+  // Shooter
+  if(eff.remove_perimeter_penalty){
+    const best=Math.min(THRESHOLDS[zone][0],THRESHOLDS[zone][1],THRESHOLDS[zone][2]);
+    if(best<threshold){threshold=best;mods.push('Shooter: best threshold');}
+  }
+  // Positionless
+  if(eff.no_size_rules){
+    const small=THRESHOLDS[zone][0];
+    if(small<threshold){threshold=small;mods.push('Positionless: small threshold');}
+  }
+  // Paint Beast
+  if(eff.paint_bonus&&isPaintZone(zone)){dice++;mods.push('+1 die (Paint Beast)');}
+  // Lob Finisher
+  if(eff.lob_auto_open&&isPaintZone(zone)&&state.lastPassDistance>=3){
+    dice=3;mods.push('Lob Finisher: auto Wide Open');
+  }
+
+  return {dice:Math.min(dice,5),threshold,mods};
+}
+
+function showDiceOverlay(zone,pts,threshold,coverage,dice,mods,rolls,made){
+  const ov=document.getElementById('dice-overlay');
+  document.getElementById('dice-zone').textContent=`${zoneName(zone)} · ${pts===3?'3-pointer':'2-pointer'} · need ${threshold}+`;
+  document.getElementById('dice-coverage').textContent=`${coverage}: ${dice} ${dice===1?'die':'dice'}`;
+  document.getElementById('dice-mods').innerHTML=mods.map(m=>`<div class="mod-line">${m}</div>`).join('');
+  const dr=document.getElementById('dice-row');
+  dr.innerHTML='';
+  rolls.forEach(r=>{
+    const d=document.createElement('div');
+    d.className='die '+(r>=threshold?'hit':'miss');
+    d.textContent=r;
+    dr.appendChild(d);
+  });
+  const rt=document.getElementById('dice-result');
+  if(made){
+    rt.textContent=`BUCKET! +${pts}`;
+    rt.style.color=pts===3?'var(--gold)':'var(--green)';
+  } else {
+    rt.textContent='NO GOOD';
+    rt.style.color='var(--red)';
+  }
+  document.getElementById('dice-pts').textContent=made?`Score: ${state.score}`:'';
+  ov.classList.add('active');
+
+  const nextBtn=document.getElementById('dice-next-btn');
+  nextBtn.onclick=()=>{
+    ov.classList.remove('active');
+    advancePossession();
+  };
+  setTimeout(()=>{/* auto advance hint */},2500);
+}
+
+function showViolation(title,detail){
+  const ov=document.getElementById('violation-overlay');
+  document.getElementById('violation-text').textContent=title;
+  document.getElementById('violation-detail').textContent=detail;
+  ov.classList.add('active');
+  document.getElementById('violation-next-btn').onclick=()=>{
+    ov.classList.remove('active');
+    advancePossession();
+  };
+}
+
+function advancePossession(){
+  // Check win condition
+  if(state.score>=TIERS[state.tierIdx].target){
+    showResult(true);return;
+  }
+  if(state.possession>=10){
+    showResult(false);return;
+  }
+  startPossession();
+}
+
+// ========================================
+// CPU DEFENSE
+// ========================================
+function cpuRespond(movedPiece){
+  state.cpuAnimating=true;
+  setTimeout(()=>{
+    // CPU: follow behavior (all difficulties)
+    Object.entries(state.manAssign).forEach(([dId,oId])=>{
+      const defender=state.defense.find(d=>d.id===dId);
+      const target=state.offense.find(o=>o.id===oId);
+      if(defender&&target)followTarget(defender,target);
+    });
+    // D4 (free helper) — guard paint
+    const d4=state.defense.find(d=>d.id==='d4');
+    if(d4&&!state.manAssign['d4']){
+      const paintCenter={col:7,row:10};
+      followTarget(d4,paintCenter);
+    }
+
+    // CPU: collapse behavior (Pro+)
+    if(['pro','all_star','hof','legend'].includes(state.difficulty)){
+      const bc=state.ballCarrier;
+      if(bc&&isPaintZone(getZone(bc.col,bc.row))){
+        const helpers=state.defense.filter(d=>d.id!=='d4'&&!isPaintZone(getZone(d.col,d.row)));
+        if(helpers.length){
+          const nearest=helpers.reduce((a,b)=>chebyshevDist(a,bc)<chebyshevDist(b,bc)?a:b);
+          followTarget(nearest,{col:7,row:10});
+        }
+      }
+    }
+
+    // CPU: sag behavior (HoF+)
+    if(['hof','legend'].includes(state.difficulty)){
+      const bc=state.ballCarrier;
+      if(bc){
+        Object.entries(state.manAssign).forEach(([dId,oId])=>{
+          const defender=state.defense.find(d=>d.id===dId);
+          const target=state.offense.find(o=>o.id===oId);
+          if(defender&&target&&chebyshevDist(target,bc)>=5){
+            followTarget(defender,{col:7,row:10});
+          }
+        });
+      }
+    }
+
+    state.cpuAnimating=false;
+    renderCourt();updateGameUI();
+
+    // Check if action points exhausted
+    if(state.actionPoints<=0){
+      // New turn
+      state.actionPoints=3;
+      state.turnFirstAction=true;
+      checkPaintTurns();
+      renderCourt();updateGameUI();
+    }
+  },400);
+}
+
+function followTarget(defender,target){
+  const dCol=Math.sign(target.col-defender.col);
+  const dRow=Math.sign(target.row-defender.row);
+  defender.trail.push({col:defender.col,row:defender.row});
+  defender.col=clamp(defender.col+dCol,0,COLS-1);
+  defender.row=clamp(defender.row+dRow,0,ROWS-1);
+}
+
+function endPlayerTurn(){
+  state.actionPoints=3;
+  state.turnFirstAction=true;
+  checkPaintTurns();
+  renderCourt();updateGameUI();
+}
+
+// ========================================
+// SCREEN 5 — RESULT
+// ========================================
+function showResult(won){
+  showScreen('result');
+  const target=TIERS[state.tierIdx].target;
+  if(won){
+    document.getElementById('result-icon').textContent='🏆';
+    document.getElementById('result-title').textContent='CHALLENGE CLEARED';
+    document.getElementById('result-score').textContent=`${state.score} / ${target}`;
+    document.getElementById('result-detail').textContent=`${TIERS[state.tierIdx].name} — ${state.possession} possessions used`;
+    document.getElementById('next-tier-btn').style.display=state.tierIdx<4?'block':'none';
+    if(state.tierIdx>=4)document.getElementById('next-tier-btn').textContent='YOU BEAT THE GAME';
+  } else {
+    document.getElementById('result-icon').textContent='';
+    document.getElementById('result-title').textContent='SO CLOSE';
+    document.getElementById('result-score').textContent=`${state.score} / ${target}`;
+    document.getElementById('result-detail').textContent=`${target-state.score} points short of ${TIERS[state.tierIdx].name}`;
+    document.getElementById('next-tier-btn').style.display='none';
+  }
+  const summary=document.getElementById('result-summary');
+  summary.innerHTML=`
+    <div><span>Made shots</span><span>${state.possessionStats.made}</span></div>
+    <div><span>Missed shots</span><span>${state.possessionStats.missed}</span></div>
+    <div><span>Best possession</span><span>${state.possessionStats.bestPossScore}pts (Poss #${state.possessionStats.bestPoss})</span></div>
+  `;
+}
+
+function tryAgain(){selectTier(state.tierIdx)}
+function nextTier(){if(state.tierIdx<4)selectTier(state.tierIdx+1);else backToMenu()}
+function backToMenu(){showScreen('select')}
+
+// ========================================
+// NAVIGATION
+// ========================================
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  state.screen=name;
+}
+
+// ========================================
+// INIT
+// ========================================
+renderTierButtons();
+</script>
+</body>
+</html>
