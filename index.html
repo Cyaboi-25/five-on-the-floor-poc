@@ -15,6 +15,7 @@ html,body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-sy
   min-height:100vh;overflow-x:hidden;-webkit-tap-highlight-color:transparent;user-select:none}
 .screen{display:none;min-height:100vh;flex-direction:column;align-items:center;padding:16px}
 .screen.active{display:flex}
+#screen-game.active{min-height:0}
 h1{font-size:clamp(1.8rem,5vw,2.8rem);letter-spacing:0.05em;text-align:center;margin-bottom:8px}
 h2{font-size:clamp(1.1rem,3vw,1.5rem);color:var(--muted);text-align:center;margin-bottom:24px}
 .subtitle{color:var(--muted);font-size:0.9rem;text-align:center;margin-bottom:24px}
@@ -85,8 +86,8 @@ button{font-family:inherit;cursor:pointer;border:none;outline:none;-webkit-tap-h
   font-size:0.75rem;width:100%;flex-shrink:0}
 .ball-info{padding:3px 12px;background:var(--surface2);font-size:0.65rem;
   width:100%;text-align:center;border-bottom:1px solid var(--border);flex-shrink:0}
-.court-wrap{width:100%;position:relative;overflow:hidden;flex:1;display:flex;align-items:center;justify-content:center}
-.court-svg{width:100%;max-height:100%;display:block}
+.court-wrap{width:100%;position:relative;overflow:hidden;flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.court-svg{max-width:100%;max-height:100%;display:block}
 .action-bar{display:flex;gap:6px;padding:4px 12px;overflow-x:auto;
   background:var(--surface);border-top:1px solid var(--border);width:100%;
   -webkit-overflow-scrolling:touch;flex-shrink:0}
@@ -788,8 +789,10 @@ function renderCourt(){
   const wrap=document.getElementById('court-wrap');
   const availH=wrap.clientHeight||400;
   const availW=wrap.clientWidth||Math.min(window.innerWidth,600);
-  const aspectW=availH*(16/14);
-  const w=Math.min(availW,aspectW,600);
+  // Court must fit BOTH available width and height
+  const fromW=Math.min(availW,600);
+  const fromH=availH*(16/14);
+  const w=Math.min(fromW,fromH);
   const h=Math.round(w*(14/16));
   courtW=w;courtH=h;tileW=w/COLS;tileH=h/ROWS;
 
